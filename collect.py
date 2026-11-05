@@ -3,6 +3,7 @@
 실행할 때마다 제주(zcode=50) 충전기 상태를 한 번 찍어서 저장합니다.
 - data/status/YYYY-MM-DD.csv.gz : 30분마다 쌓이는 상태 기록 (급속 + 공공기관 충전기)
 - data/master/YYYY-MM-DD.csv.gz : 하루 한 번 저장하는 충전기 기본 정보 (전체)
+- data/master_full/YYYY-MM-DD.csv.gz : 하루 한 번, API가 주는 모든 항목 (설치년도·안내문·이용시간 등)
 
 필요한 것: 환경변수 KECO_KEY (공공데이터포털 '일반 인증키(Decoding)')
 """
@@ -97,6 +98,11 @@ def main():
     master = f"data/master/{day}.csv.gz"
     if not os.path.exists(master):
         append_gz(master, MASTER_COLS, rows)
+
+    full = f"data/master_full/{day}.csv.gz"
+    if not os.path.exists(full):
+        cols = ["collected_at"] + sorted({k for r in rows for k in r} - {"collected_at"})
+        append_gz(full, cols, rows)
 
     print(f"[{stamp}] 제주 전체 {total}대 중 {len(rows)}대 수신, 상태 저장 {len(keep)}대")
 
