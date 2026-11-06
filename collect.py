@@ -3,6 +3,7 @@
 실행할 때마다 제주(zcode=50) 충전기 상태를 한 번 찍어서 저장합니다.
 - data/status/YYYY-MM-DD.csv.gz : 30분마다 쌓이는 상태 기록 (급속 + 공공기관 충전기)
 - data/master/YYYY-MM-DD.csv.gz : 하루 한 번 저장하는 충전기 기본 정보 (전체)
+- data/latest.csv.gz : 가장 최근 상태 한 번분 (화면이 '지금 상태'로 씀)
 - data/master_full/YYYY-MM-DD.csv.gz : 하루 한 번, API가 주는 모든 항목 (설치년도·안내문·이용시간 등)
 
 필요한 것: 환경변수 KECO_KEY (공공데이터포털 '일반 인증키(Decoding)')
@@ -94,6 +95,14 @@ def main():
             if str(r.get("chgerType", "")) not in SLOW_TYPES
             or r.get("busiId") in PUBLIC_BUSI]
     append_gz(f"data/status/{day}.csv.gz", STATUS_COLS, keep)
+
+    # 화면용 최신 상태 (매번 덮어씀, 30분마다 GitHub에 올라감)
+    tmp = "data/latest.csv.gz.tmp"
+    with gzip.open(tmp, "wt", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=STATUS_COLS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(keep)
+    os.replace(tmp, "data/latest.csv.gz")
 
     master = f"data/master/{day}.csv.gz"
     if not os.path.exists(master):
