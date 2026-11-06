@@ -1,4 +1,4 @@
-"""충전기 지킴이 - 고장 진단 v2 (평가서 4건 반영)
+"""고장났수다 - 고장 진단 v2 (평가서 4건 반영)
 
 사용법:  python -m guardian.diagnose
 결과:    out/diagnosis_YYYYMMDD_HHMM.csv   (충전기별 판정 + 근거 문장 + 점검 우선순위)
@@ -108,6 +108,11 @@ def open_days(t0, t1, hrs):
 # ---------------- 데이터 ----------------
 def load():
     s = _read_gz(f"{DATA}/status/*.csv.gz")
+    lp = f"{DATA}/latest.csv.gz"       # 30분마다 올라오는 최신 상태가 더 새로우면 덧붙임
+    if os.path.exists(lp):
+        lt = pd.read_csv(lp, dtype=str, keep_default_na=False)
+        if len(lt) and lt["collected_at"].max() > s["collected_at"].max():
+            s = pd.concat([s, lt], ignore_index=True)
     s["t"] = pd.to_datetime(s["collected_at"])
     s = s.sort_values("t").drop_duplicates(["statId", "chgerId", "t"])
     m = _read_gz(f"{DATA}/master/*.csv.gz").sort_values("collected_at") \
