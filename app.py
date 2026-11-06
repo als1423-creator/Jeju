@@ -1,4 +1,4 @@
-"""충전기 지킴이 - 화면 (Streamlit)
+"""고장났수다 - 화면 (Streamlit)
 
 실행:  streamlit run app.py
 """
@@ -14,7 +14,7 @@ import streamlit as st
 
 from guardian.diagnose import DATA, PUBLIC, _read_gz, diagnose
 
-st.set_page_config(page_title="충전기 지킴이", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="고장났수다", layout="wide", initial_sidebar_state="collapsed")
 
 # ---------------- 표시 규칙 ----------------
 BUSI = {"JD": "제주특별자치도", "ME": "환경부", "JC": "제주에너지공사",
@@ -280,7 +280,7 @@ pub = d[d["busiId"].isin(PUBLIC)]
 
 h1, h2 = st.columns([5, 1.3], vertical_alignment="center")
 with h1:
-    st.markdown("<p class='brand'>충전기 지킴이</p><div class='brand-sub'>제주 공공 전기차 충전기의 숨은 고장과 장기 방치를 찾아 점검 순서를 정합니다</div>",
+    st.markdown("<p class='brand'>고장났수다</p><div class='brand-sub'>멀쩡한 척하는 제주 충전기, 숨은 고장과 장기 방치를 찾아 점검 순서를 정합니다</div>",
                 unsafe_allow_html=True)
 with h2:
     offline = st.toggle("오프라인 모드", value=False, help="인터넷이 없을 때 켜세요. 배경 지도만 꺼지고 나머지는 그대로 동작합니다.")
@@ -354,7 +354,7 @@ with tab_op:
         items = "".join(
             f"<div class='i'>{n}. {r.statNm} {r.chgerId}번 · <b>{r.판정}</b><div class='r'>{r.근거} · {r.고유번호}</div></div>"
             for n, r in enumerate(top.itertuples(), 1))
-        st.markdown(f"<div class='msg'><div class='h'>[충전기 지킴이] {op} 점검 요청</div>"
+        st.markdown(f"<div class='msg'><div class='h'>[고장났수다] {op} 점검 요청</div>"
                     f"<div class='t'>{attrs['now']:%m월 %d일 %H:%M} 기준 · 경보 {len(alarm)}건 중 상위 {len(top)}건</div>"
                     f"{items or '<div class=i>오늘 경보가 없습니다.</div>'}</div>", unsafe_allow_html=True)
         tok, chat = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
@@ -362,7 +362,7 @@ with tab_op:
                      help=None if tok and chat else "텔레그램 봇 설정 후 사용할 수 있습니다."):
             import urllib.parse
             import urllib.request
-            text = "\n".join([f"[충전기 지킴이] {op} 점검 요청 ({attrs['now']:%m/%d %H:%M})"] +
+            text = "\n".join([f"[고장났수다] {op} 점검 요청 ({attrs['now']:%m/%d %H:%M})"] +
                              [f"{n}. {r.statNm} {r.chgerId}번 · {r.판정}\n   {r.근거}" for n, r in enumerate(top.itertuples(), 1)])
             urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/sendMessage?" +
                                    urllib.parse.urlencode({"chat_id": chat, "text": text}), timeout=15)
@@ -457,5 +457,5 @@ st.markdown(
     f"<div class='foot'>기준 시각 {attrs['now']:%Y-%m-%d %H:%M} · 수집 기간 {attrs['t_first']:%m/%d}~{attrs['now']:%m/%d} "
     f"(30분 간격, {attrs['n_snaps']}회)<br>"
     "데이터: 한국환경공단 전기자동차 충전소 정보 API · 제주데이터허브 [인구, 생활] 전기자동차 충전소 정보(862, 2025.9.21 기준) · "
-    "한국전력공사 전기차 충전소 충전량(2023.1~2026.9)<br>충전기 지킴이 · 제주 AI·빅데이터 활용 AI Agent 개발 챌린지</div>",
+    "한국전력공사 전기차 충전소 충전량(2023.1~2026.9)<br>고장났수다 · 제주 AI·빅데이터 활용 AI Agent 개발 챌린지</div>",
     unsafe_allow_html=True)
