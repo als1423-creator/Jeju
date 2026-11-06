@@ -116,8 +116,14 @@ def days(x):
     return f"{x * 24:.0f}시간" if x < 2 else f"{x:.0f}일"
 
 
-@st.cache_data(ttl=1800, show_spinner="진단 계산 중입니다 (약 20초)")
-def load():
+def data_sig():
+    """데이터 파일이 바뀌면 다시 계산하도록 파일 크기·수정 시각을 묶은 값"""
+    fs = sorted(glob.glob(f"{DATA}/status/*.csv.gz")) + glob.glob(f"{DATA}/latest.csv.gz")
+    return tuple((f, os.path.getsize(f), int(os.path.getmtime(f))) for f in fs)
+
+
+@st.cache_data(ttl=1800, max_entries=2, show_spinner="진단 계산 중입니다 (약 20초)")
+def load(sig):
     d = diagnose()
     attrs = dict(d.attrs)
     m = _read_gz(f"{DATA}/master/*.csv.gz").sort_values("collected_at") \
@@ -275,7 +281,7 @@ def table_cols(df):
 
 # ---------------- 화면 ----------------
 st.markdown(CSS, unsafe_allow_html=True)
-d, attrs, coord_err = load()
+d, attrs, coord_err = load(data_sig())
 pub = d[d["busiId"].isin(PUBLIC)]
 
 h1, h2 = st.columns([5, 1.3], vertical_alignment="center")
