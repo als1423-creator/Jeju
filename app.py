@@ -5,6 +5,7 @@
 """
 import glob
 import html
+import json
 import os
 import re
 
@@ -14,6 +15,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
+import guardian.agent as A
 from guardian.diagnose import DATA, PUBLIC, _read_gz, diagnose
 
 LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1.5 172 43" width="172" height="43"><path d="M10 2h20a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8H15l-7.2 5.4c-.7.5-1.6 0-1.6-.8V33.6A8 8 0 0 1 2 26V10a8 8 0 0 1 8-8z" fill="#1D4ED8"/><path d="M22.6 7.5 12.8 20.6h6.4l-2.1 9.9 9.8-13.4h-6.5z" fill="#fff"/><circle cx="34" cy="6" r="5.2" fill="#F04438" stroke="#fff" stroke-width="2.4"/><path d="M53.429 10.118500000000001V12.9805H67.955C67.955 15.8965 67.901 19.3795 66.983 24.1045L70.574 24.4825C71.57300000000001 19.1635 71.57300000000001 15.6265 71.57300000000001 12.494499999999999V10.118500000000001ZM59.099000000000004 18.488500000000002V27.0745H51.107V29.9905H73.733V27.0745H62.717V18.488500000000002ZM86.90899999999999 23.2675C81.725 23.2675 78.431 25.1035 78.431 28.127499999999998C78.431 31.2055 81.725 33.0145 86.90899999999999 33.0145C92.09299999999999 33.0145 95.36 31.2055 95.36 28.127499999999998C95.36 25.1035 92.09299999999999 23.2675 86.90899999999999 23.2675ZM86.90899999999999 26.075499999999998C90.095 26.075499999999998 91.79599999999999 26.7235 91.79599999999999 28.127499999999998C91.79599999999999 29.5585 90.095 30.2335 86.90899999999999 30.2335C83.723 30.2335 82.02199999999999 29.5585 82.02199999999999 28.127499999999998C82.02199999999999 26.7235 83.723 26.075499999999998 86.90899999999999 26.075499999999998ZM75.974 9.659500000000001V12.5215H80.969C80.91499999999999 15.6535 79.106 18.8125 75.056 20.1625L76.838 22.9975C79.80799999999999 22.0255 81.779 20.054499999999997 82.886 17.5435C83.966 19.6495 85.829 21.2965 88.583 22.133499999999998L90.31099999999999 19.325499999999998C86.369 18.1645 84.64099999999999 15.3835 84.58699999999999 12.5215H89.501V9.659500000000001ZM91.472 8.0125V22.8355H95.06299999999999V16.679499999999997H98.384V13.7365H95.06299999999999V8.0125ZM115.77199999999999 7.985499999999998V21.7825H119.363V16.247500000000002H122.684V13.331499999999998H119.363V7.985499999999998ZM100.70599999999999 17.6515V20.5945H102.785C106.32199999999999 20.5945 110.18299999999999 20.3785 114.23299999999999 19.5415L113.82799999999999 16.6525C110.47999999999999 17.3275 107.267 17.5705 104.297 17.624499999999998V9.470500000000001H100.70599999999999ZM114.071 22.8085V23.9695C114.071 25.8055 113.261 27.9925 111.23599999999999 29.5045C109.26499999999999 28.0735 108.482 25.9945 108.482 23.9695V22.8085H104.999V23.9695C104.999 26.4265 103.622 28.9645 100.38199999999999 30.1255L102.16399999999999 32.7445C104.405 31.9075 105.89 30.3955 106.72699999999999 28.5325C107.53699999999999 30.476499999999998 108.96799999999999 32.1235 111.26299999999999 32.9875C113.53099999999999 32.0695 114.96199999999999 30.3955 115.77199999999999 28.4785C116.636 30.3955 118.121 31.9075 120.443 32.7445L122.225 30.1255C118.931 29.072499999999998 117.63499999999999 26.6155 117.63499999999999 23.9695V22.8085ZM133.42999999999998 8.714500000000001V9.9025C133.42999999999998 12.8185 130.56799999999998 16.0855 124.844 16.868499999999997L126.24799999999999 19.7575C130.595 19.0825 133.727 17.057499999999997 135.34699999999998 14.3845C136.94 17.057499999999997 140.072 19.0825 144.41899999999998 19.7575L145.82299999999998 16.868499999999997C140.099 16.0855 137.237 12.7915 137.237 9.9025V8.714500000000001ZM124.00699999999999 21.566499999999998V24.4825H133.42999999999998V33.0145H137.021V24.4825H146.63299999999998V21.566499999999998ZM164.26399999999998 7.958500000000001V33.0415H167.88199999999998V20.1895H171.5V17.2195H167.88199999999998V7.958500000000001ZM149.25199999999998 10.2805V27.0475H151.35799999999998C155.70499999999998 27.0475 159.134 26.9125 162.914 26.2375L162.563 23.2675C159.35 23.8345 156.40699999999998 24.0235 152.843 24.0775V13.1695H160.916V10.2805Z" fill="#101828"/></svg>'
@@ -173,6 +175,9 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .sleg { display: flex; flex-wrap: wrap; gap: .2rem .8rem; font-size: .78rem; color: #475467; }
 .sleg b { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; margin-right: .3rem; vertical-align: .05rem; }
 
+.agent-st { display: inline-flex; align-items: center; gap: .45rem; font-size: .82rem; color: #475467; margin: 0 0 .4rem; }
+.agent-st i { width: .5rem; height: .5rem; border-radius: 50%; }
+.agent-empty { color: #667085; font-size: .9rem; background: #F9FAFB; border: 1px dashed #D0D5DD; border-radius: 12px; padding: 1rem 1.1rem; line-height: 1.7; }
 .foot { border-top: 1px solid #EAECF0; margin-top: 2.5rem; padding-top: .9rem; color: #98A2B3; font-size: .76rem; line-height: 1.7; }
 </style>
 """
@@ -328,7 +333,8 @@ CIT_INFO = ("<b>방문 전 확인</b> 최근 정상 충전 기록이 없거나 �
             "<b>이용 불가</b> 운영 중지·점검 중이거나 6시간 넘게 신호가 끊긴 곳")
 
 
-PAGE_TONE = {"gov": ("#EEF4FF", "#1D4ED8"), "op": ("#FEF0E7", "#E8761E"), "cit": ("#E7F6EC", "#12B76A")}
+PAGE_TONE = {"gov": ("#EEF4FF", "#1D4ED8"), "op": ("#FEF0E7", "#E8761E"), "cit": ("#E7F6EC", "#12B76A"),
+             "robot": ("#F4F3FF", "#7A5AF8")}
 
 
 def page_head(title, ic, desc, note):
@@ -724,6 +730,112 @@ def cit_page():
             st.caption(f"외 {len(g) - 30}곳. 검색어를 더 좁혀 보세요.")
 
 
+def openai_key():
+    k = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not k:
+        try:
+            k = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+        except Exception:   # secrets 파일이 없으면 오류가 나므로 무시
+            k = ""
+    return k
+
+
+def show_turn(m):
+    with st.chat_message(m["role"], avatar=":material/smart_toy:" if m["role"] == "assistant" else ":material/person:"):
+        st.markdown(m["content"])
+        if m["role"] != "assistant":
+            return
+        if m.get("checked"):
+            if m.get("bad"):
+                st.warning(f"데이터에서 확인되지 않은 숫자: {', '.join(m['bad'])}. 아래 계산 결과를 확인하세요.")
+            else:
+                st.caption("✓ 답 속 숫자를 모두 데이터 계산 결과와 대조했습니다.")
+        if m.get("trace"):
+            with st.expander(f"에이전트가 한 일 · 도구 {len(m['trace'])}번 사용"):
+                for t in m["trace"]:
+                    st.markdown(f"**{t['도구']}** `{json.dumps(t['입력'], ensure_ascii=False)}`")
+                    st.json(t["결과"], expanded=False)
+
+
+def agent_page():
+    page_head("AI 에이전트", "robot", "묻는 말에 데이터를 직접 계산해 답하고, 점검 현황 보고서를 만듭니다.",
+              "숫자는 모두 진단 데이터에서 계산한 값이며, 숨은고장은 추정입니다.")
+    key = openai_key()
+    st.markdown(f"<div class='agent-st'><i style='background:{'#12B76A' if key else '#98A2B3'}'></i>"
+                + (f"OpenAI 연결됨 · {A.MODEL}" if key else "API 키 없음 · 아래 질문 버튼과 보고서는 그대로 동작합니다")
+                + "</div>", unsafe_allow_html=True)
+    t1, t2 = st.tabs(["질문하기", "점검 보고서"])
+    with t1:
+        hist = st.session_state.setdefault("chat", [])
+        with st.container(horizontal=True, key="presets"):
+            picked = None
+            for label in A.PRESETS:
+                if st.button(label, key=f"pre_{label}"):
+                    picked = label
+            if hist and st.button("대화 지우기", icon=":material/delete:", key="chat_clear"):
+                hist.clear()
+                st.rerun()
+        q = st.chat_input("예: 서귀포에서 지금 쓸 수 있는 급속 충전기 어디야?")
+        if picked:
+            txt, trace = A.preset_answer(d, attrs, picked)
+            hist += [{"role": "user", "content": picked},
+                     {"role": "assistant", "content": txt, "trace": trace, "checked": True, "bad": []}]
+        elif q:
+            hist.append({"role": "user", "content": q})
+            if key:
+                with st.spinner("에이전트가 데이터를 찾고 계산하는 중입니다"):
+                    try:
+                        past = [{"role": m["role"], "content": m["content"]} for m in hist[:-1]]
+                        ans, trace, bad = A.ask(d, attrs, q, history=past, key=key)
+                        hist.append({"role": "assistant", "content": ans, "trace": trace, "checked": True, "bad": bad})
+                    except RuntimeError as e:
+                        hist.append({"role": "assistant", "content": f"지금은 AI에 연결하지 못했습니다. ({e}) 위 질문 버튼은 그대로 쓸 수 있습니다."})
+            else:   # 키가 없으면 충전소 검색만
+                res = A.t_search(d, attrs, q)
+                if isinstance(res.get("결과"), list):
+                    rows = [{k: r[k] for k in ["충전소", "주소", "사용 가능", "충전 중", "방문 전 확인", "이용 불가"]} for r in res["결과"]]
+                    txt = (f"찾은 충전소 {res['충전소_수']}곳 중 지금 사용 가능한 충전기가 많은 {len(rows)}곳입니다. "
+                           "(API 키가 없어 이름·지역 검색으로 찾았습니다)\n\n" + A.table_md(rows))
+                    hist.append({"role": "assistant", "content": txt, "trace": [{"도구": "search_station", "입력": {"query": q}, "결과": res}],
+                                 "checked": True, "bad": []})
+                else:
+                    hist.append({"role": "assistant", "content": "API 키가 없어서 자유 질문은 충전소 이름·지역 검색만 됩니다. "
+                                                                 "위 질문 버튼을 써 보세요."})
+        if not hist:
+            st.markdown("<div class='agent-empty'>위 버튼을 누르거나 아래에 질문을 입력하세요.<br>"
+                        "예: \"환경부 충전기 중 통신 끊긴 거 몇 대야?\", \"성산공설묘지 충전기 상태 알려줘\", "
+                        "\"제주에너지공사에 보낼 점검 요청서 써 줘\"</div>", unsafe_allow_html=True)
+        for m in hist:
+            show_turn(m)
+    with t2:
+        names = ["공공 운영기관 전체"] + [BUSI[b] for b in BUSI if (pub["busiId"] == b).any()]
+        c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+        target = c1.selectbox("보고서 대상", names)
+        if c2.button("보고서 만들기", type="primary", width="stretch", key="make_report"):
+            with st.spinner("최신 진단 결과로 보고서를 만드는 중입니다"):
+                md, facts = A.build_report(d, attrs, None if target == names[0] else target)
+                summary, note = None, ""
+                if key:
+                    try:
+                        summary = A.report_summary(facts, key)
+                        note = "" if summary else "AI 요약에 데이터와 다른 숫자가 있어 넣지 않았습니다."
+                    except RuntimeError as e:
+                        note = f"AI 요약 없이 만들었습니다 ({e})."
+                st.session_state["report"] = (A.render_report(md, summary), note)
+        st.caption("표와 숫자는 코드가 진단 데이터에서 직접 계산합니다. AI는 첫머리 요약 문단만 쓰고, 그 숫자도 대조를 통과해야 넣습니다.")
+        if st.session_state.get("report"):
+            rep, note = st.session_state["report"]
+            if note:
+                st.info(note)
+            b1, b2 = st.columns(2)
+            b1.download_button("한글·워드용 (HTML, 인쇄하면 PDF)", A.report_html(rep).encode("utf-8"),
+                               f"점검현황보고서_{attrs['now']:%Y%m%d_%H%M}.html", width="stretch", on_click="ignore")
+            b2.download_button("텍스트 (Markdown)", rep.encode("utf-8"), f"점검현황보고서_{attrs['now']:%Y%m%d_%H%M}.md",
+                               width="stretch", on_click="ignore")
+            with st.container(border=True):
+                st.markdown(rep)
+
+
 # ---------------- 실행 ----------------
 st.logo(LOGO_SVG, size="large")
 PAGES = {
@@ -731,6 +843,7 @@ PAGES = {
     "gov": st.Page(gov_page, title="공공기관", icon=":material/account_balance:", url_path="gov"),
     "op": st.Page(op_page, title="운영사", icon=":material/engineering:", url_path="operator"),
     "cit": st.Page(cit_page, title="도민", icon=":material/electric_car:", url_path="citizen"),
+    "agent": st.Page(agent_page, title="AI 에이전트", icon=":material/smart_toy:", url_path="agent"),
 }
 nav = st.navigation(list(PAGES.values()), position="top")
 st.html(CSS)
