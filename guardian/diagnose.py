@@ -5,7 +5,7 @@
 
 구조
   0. 품질 게이트   : 수집 공백·이력 없음·이용 제한·전용 충전기는 판정 보류/제외
-  A. 공식 상태     : A1 운영불가 / A2 통신두절(6h 주의, 24h 경보) / A3 간헐 통신(플래핑) / A4 고착
+  A. 공식 상태     : A1 운영불가 / A2 통신두절(6h 주의, 24h 경보) / A3 간헐 통신(플래핑) / A4 고착(장시간 점유와 구분: 급속 48h·완속 72h부터 경보, 주말 휴무 기관은 주말엔 주의까지)
   B. 숨은 고장     : B1 형제 비교 / B2 이웃 비교(이질성 반영) / B3 실패 세션 반복  → BH 다중검정
   C. 묶음          : 충전소 단위 동시 장애, 운영사 일괄 갱신 이벤트
   D. 트랙 분리     : 수리 트랙(우선순위 점수) / 행정 트랙(1년+ 미사용 = 철거·목록 정리)
@@ -24,7 +24,9 @@ from guardian.judge import DATA, OUT, PUBLIC, SLOW, STAT_NAME, _read_gz
 ERR = {"1", "0", "9"}
 SHORT_MIN = 5                 # 5분 미만 세션 = 실패 의심
 COMM_WARN_H, COMM_ALARM_H = 6, 24
-STUCK = {True: (4, 12), False: (24, 48)}   # 급속/완속 (주의, 고착) 시간 — 세션 길이 99%: 급속 3.6h, 완속 14.5h
+STUCK = {True: (4, 48), False: (24, 72)}   # 급속/완속 (주의, 경보) 시간 — 세션 길이 99%: 급속 3.6h, 완속 14.5h
+#   경보를 12h→48h로 올린 이유: 관용차를 퇴근 후·주말에 꽂아 두면 충전 중 표시가 이어짐(점유≠고장).
+#   48h는 금요일 저녁~일요일 저녁 주차를 넘는 길이.
 FLAP_WINDOW_H, FLAP_MIN_SNAPS, FLAP_ERR_RATIO = 48, 20, 0.5
 CV2_SIB = 0.16                # 형제끼리도 선호도 차이 ±40% 허용 (입구 쪽 기기 선호 등)
 CV2_MIN = 0.16                # 이웃 이질성 하한
@@ -225,9 +227,15 @@ def diagnose():
             code[i], grade[i], why[i] = "A2", g, f"{STAT_NAME[r['stat']]} {_dur(r['state_h'])} 연속"
         elif r["stat"] == "3" and r["charge_h"] >= STUCK[fast][0]:
             g = "경보" if r["charge_h"] >= STUCK[fast][1] else "주의"
+            # 주말 휴무 기관(허브 기준)은 토·일과 월요일 9시 전에는 경보로 올리지 않음 (관용차 주말 주차)
+            weekend = now.weekday() >= 5 or (now.weekday() == 0 and now.hour < 9)
+            held = g == "경보" and r["hours"][2] and weekend
+            if held:
+                g = "주의"
             code[i], grade[i] = "A4", g
             why[i] = f"{'급속' if fast else '완속'} 충전중 {_dur(r['charge_h'])} " \
-                     f"(정상 충전의 99%는 {3.6 if fast else 14.5}시간 이내)" + ("" if g == "경보" else ", 완충 후 주차 가능성")
+                     f"(정상 충전의 99%는 {3.6 if fast else 14.5}시간 이내)" + \
+                     ("" if g == "경보" else ", 주말 휴무 기관이라 주말엔 주의로만" if held else ", 완충 후 장시간 주차 가능성")
         k = (r["statId"], r["chgerId"])
         if code[i] == "" and k in fl.index:
             f = fl.loc[k]
