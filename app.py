@@ -190,13 +190,13 @@ header[data-testid="stHeader"] { background: #EDEFF2; border-bottom: none; }
 .feats { list-style: none; margin: 0; padding: 0; }
 .feats li { display: flex; align-items: center; gap: 1rem; margin: 0 0 1.05rem; font-size: 1.04rem; color: #1D2939; }
 .feats li svg { flex: none; color: #101828; }
-.hero-art { position: relative; height: 560px; display: flex; justify-content: center; align-items: flex-end; }
+.hero-art { position: relative; height: 560px; display: flex; justify-content: flex-end; align-items: flex-end; padding-right: 2%; }
 .hero-art .charger { height: 540px; width: auto; position: relative; z-index: 2; margin-bottom: -6px; }
 .hero-art .ping { animation: blink 1.6s ease-in-out infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-.vs { position: absolute; z-index: 3; left: calc(-4% - 150px); top: 29%; width: 310px; background: #fff;
+.vs { position: absolute; z-index: 3; left: auto; right: calc(2% + 300px); top: 29%; width: 310px; background: #fff;
       border-radius: 16px; padding: .9rem 1rem .8rem; box-shadow: 0 16px 40px rgba(16, 24, 40, .14); border: 1px solid #EAECF0; }
-.vs:after { content: ''; position: absolute; right: -86px; top: 5.05rem; width: 86px; border-top: 2px dashed #D92D20; opacity: .55; }
+.vs:after { content: ''; position: absolute; right: -98px; top: 5.05rem; width: 98px; border-top: 2px dashed #D92D20; opacity: .55; }
 .vs .vh { display: flex; align-items: center; gap: .45rem; font-size: .88rem; font-weight: 700; color: #101828; }
 .vs .vb { background: #101828; color: #fff; font-size: .68rem; font-weight: 700; border-radius: 6px; padding: .12rem .4rem; letter-spacing: .02em; }
 .vs .rows { margin: .75rem 0 .1rem; }
@@ -216,7 +216,7 @@ header[data-testid="stHeader"] { background: #EDEFF2; border-bottom: none; }
   .hero-in { grid-template-columns: 1fr; min-height: 0; padding-top: 2.4rem; }
   .hero-art { height: 340px; margin-top: .5rem; justify-content: flex-end; padding-right: 6%; }
   .hero-art .charger { height: 320px; }
-  .vs { left: 0; top: 50%; width: 236px; padding: .7rem .8rem .6rem; }
+  .vs { left: 0; right: auto; top: 50%; width: 236px; padding: .7rem .8rem .6rem; }
   .vs:after { display: none; }
   .vs .vr { grid-template-columns: 1.3rem 3.6rem 1fr; }
   .vs .vv { font-size: .88rem; }
@@ -616,7 +616,7 @@ def op_page():
     with b:
         st.markdown("<div class='sec'>점검 목록</div>", unsafe_allow_html=True)
         all_g = st.toggle("주의·관찰도 보기", value=False, key="op_all",
-                          help="주의는 대부분 완충 후 주차 등 일시적인 경우입니다.")
+                          help="주의 = 충전 중이 길게 이어지거나 통신이 잠깐 끊긴 경우. 고장일 수도, 일시적일 수도 있습니다.")
         lst = mine if all_g else alarm
         if len(lst):
             # 방치 기간까지 한눈에: 좁은 칸은 작게, 고유번호는 맨 뒤로
