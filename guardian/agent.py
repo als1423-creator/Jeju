@@ -78,16 +78,18 @@ def t_overview(d, attrs, operator=None):
             "운영기관별_경보": rep[rep["grade"] == "경보"].groupby("운영기관").size().sort_values(ascending=False).to_dict()}
 
 
-def t_priority(d, attrs, operator=None, grade="경보", code=None, limit=10):
+def t_priority(d, attrs, operator=None, grade=None, code=None, limit=10):
     r = _op(_repair(d), operator).reset_index(drop=True)
     r.insert(0, "순위", r.index + 1)
+    if grade is None:   # 판정을 콕 집어 물으면 경보·주의·관찰 모두, 아니면 경보만
+        grade = "전체" if code else "경보"
     if grade and grade != "전체":
         r = r[r["grade"] == grade]
     if code:
         r = r[r["판정"].str.contains(str(code)) | (r["code"] == code)]
     limit = int(min(max(limit or 10, 1), 30))
     return {"기준시각": f"{attrs['now']:%Y-%m-%d %H:%M}", "조건": {"운영기관": operator or "전체", "등급": grade or "전체"},
-            "해당_대수": int(len(r)),
+            "해당_대수": int(len(r)), "등급별_대수": r["grade"].value_counts().to_dict(),
             "목록": _rows(r.rename(columns={"statNm": "충전소", "chgerId": "번호", "grade": "등급"}),
                         ["순위", "충전소", "번호", "운영기관", "판정", "등급", "방치", "근거", "고유번호"], limit)}
 
@@ -186,7 +188,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "priority_list", "description": "점검 우선순위 목록. 오늘 점검할 곳, 경보 목록, 특정 판정(통신두절·숨은고장 등) 목록",
                                       "parameters": {"type": "object", "properties": {
                                           "operator": _OP,
-                                          "grade": {"type": "string", "enum": ["경보", "주의", "관찰", "전체"]},
+                                          "grade": {"type": "string", "enum": ["경보", "주의", "관찰", "전체"], "description": "생략하면 판정(code)을 지정한 경우 전체, 아니면 경보"},
                                           "code": {"type": "string", "description": "판정 이름 일부: 운영불가, 통신두절, 간헐통신, 충전고착, 숨은고장, 실패충전"},
                                           "limit": {"type": "integer"}}}}},
     {"type": "function", "function": {"name": "search_station", "description": "충전소 이름이나 지역(읍면동, 장소)으로 찾아 지금 상태 요약. 도민 질문(어디서 충전할 수 있나)에 사용",
@@ -275,7 +277,8 @@ def system_prompt(attrs):
         f"3. 등급 뜻: {GRADE_HELP}. 숨은 고장은 이용 기록으로 추정한 것이지 고장 확정이 아니다.\n"
         "4. 한국어로, 짧고 쉽게. 목록은 마크다운 표나 번호 목록. 첫 문장에 답(숫자)을 먼저.\n"
         "5. 운영사 점검 요청서는 초안만 만든다. 발송은 담당자가 운영사 화면에서 확인 후 직접 한다고 안내한다.\n"
-        "6. 충전기를 고치거나 상태를 바꾸는 일은 할 수 없다. 할 수 있는 일은 조회·계산·문서 작성이다.")
+        "6. 개수를 답할 때는 등급별(경보·주의·관찰) 대수도 함께 말한다.\n"
+        "7. 충전기를 고치거나 상태를 바꾸는 일은 할 수 없다. 할 수 있는 일은 조회·계산·문서 작성이다.")
 
 
 def ask(d, attrs, question, history=None, key=None):
