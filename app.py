@@ -148,11 +148,12 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .msg .t { color: #667085; font-size: .8rem; margin-bottom: .6rem; }
 .msg .i { padding: .45rem 0; border-top: 1px solid #E4E7EC; }
 .msg .i .r { color: #475467; font-size: .82rem; margin-top: .1rem; }
-.chips { display: flex; flex-wrap: wrap; gap: .35rem; }
-.chip { border-radius: 999px; padding: .1rem .55rem; font-size: .78rem; background: #F2F4F7; color: #344054; }
 
 /* 지도 오른쪽 아래 ⓘ 버튼: 지도 위에 겹쳐 놓기 */
 [class*="st-key-mapinfo"] { margin-top: -3.9rem; position: relative; z-index: 5; padding-right: .6rem; pointer-events: none; }
+/* 지도 자체의 출처 ⓘ 는 숨김 (우리 ⓘ 와 맨 아래에 출처 표기) */
+[data-testid="stDeckGlJsonChart"] .mapboxgl-ctrl-bottom-right,
+[data-testid="stDeckGlJsonChart"] .maplibregl-ctrl-bottom-right { display: none !important; }
 [class*="st-key-mapinfo"] button { pointer-events: auto; background: rgba(255,255,255,.94); border-color: #D0D5DD;
                                    min-height: 2.1rem; padding: 0 .55rem; }
 .mi { font-size: .84rem; color: #344054; line-height: 1.65; }
@@ -161,8 +162,16 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 /* 도민 목록: 왼쪽·아래 여백 */
 .st-key-cit_list { padding: .15rem .55rem 1.2rem .7rem; }
 .st-key-cit_list [data-testid="stVerticalBlockBorderWrapper"], .st-key-cit_list .stVerticalBlock { gap: .7rem; }
-.cn { font-weight: 700; color: #101828; }
-.ca { color: #667085; font-size: .82rem; margin: .1rem 0 .45rem; }
+.cn { font-weight: 700; color: #101828; font-size: 1rem; }
+.ca { color: #667085; font-size: .8rem; margin-top: .1rem; }
+.st-key-cit_list button p { white-space: nowrap; }
+.big { display: flex; align-items: baseline; gap: .4rem; margin-top: -.15rem; }
+.big span { font-size: 1.65rem; font-weight: 800; line-height: 1; }
+.big em { font-style: normal; font-size: .82rem; color: #475467; }
+.sbar { display: flex; gap: 2px; height: 8px; border-radius: 99px; overflow: hidden; background: #F2F4F7; margin: .5rem 0 .45rem; }
+.sbar i { display: block; }
+.sleg { display: flex; flex-wrap: wrap; gap: .2rem .8rem; font-size: .78rem; color: #475467; }
+.sleg b { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; margin-right: .3rem; vertical-align: .05rem; }
 
 .foot { border-top: 1px solid #EAECF0; margin-top: 2.5rem; padding-top: .9rem; color: #98A2B3; font-size: .76rem; line-height: 1.7; }
 </style>
@@ -185,20 +194,32 @@ header[data-testid="stHeader"] { background: #EDEFF2; border-bottom: none; }
 .hero-art .charger { height: 540px; width: auto; position: relative; z-index: 2; margin-bottom: -6px; }
 .hero-art .ping { animation: blink 1.6s ease-in-out infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-.scan { position: absolute; z-index: 3; left: -6%; top: 57%; width: 250px; background: #fff; border-radius: 14px;
-        padding: .8rem .95rem .85rem; box-shadow: 0 14px 36px rgba(16, 24, 40, .14); border: 1px solid #EAECF0; }
-.scan .h { display: flex; align-items: center; gap: .45rem; font-size: .76rem; font-weight: 700; color: #D92D20; }
-.scan .h i { width: .5rem; height: .5rem; border-radius: 50%; background: #F04438; box-shadow: 0 0 0 3px #FEE4E2; }
-.scan .t { font-size: .95rem; font-weight: 700; color: #101828; margin: .3rem 0 .15rem; }
-.scan .b { font-size: .8rem; color: #475467; line-height: 1.45; }
-.scan .f { font-size: .72rem; color: #98A2B3; margin-top: .45rem; }
+.vs { position: absolute; z-index: 3; left: calc(-4% - 150px); top: 29%; width: 310px; background: #fff;
+      border-radius: 16px; padding: .9rem 1rem .8rem; box-shadow: 0 16px 40px rgba(16, 24, 40, .14); border: 1px solid #EAECF0; }
+.vs:after { content: ''; position: absolute; right: -86px; top: 5.05rem; width: 86px; border-top: 2px dashed #D92D20; opacity: .55; }
+.vs .vh { display: flex; align-items: center; gap: .45rem; font-size: .88rem; font-weight: 700; color: #101828; }
+.vs .vb { background: #101828; color: #fff; font-size: .68rem; font-weight: 700; border-radius: 6px; padding: .12rem .4rem; letter-spacing: .02em; }
+.vs .rows { margin: .75rem 0 .1rem; }
+.vs .vr { display: grid; grid-template-columns: 1.4rem 4.2rem 1fr; align-items: center; column-gap: .45rem; position: relative; }
+.vs .vr + .vr { margin-top: .85rem; }
+.vs .vr:first-child:after { content: ''; position: absolute; left: .68rem; top: 1.4rem; height: .85rem; border-left: 2px solid #E4E7EC; }
+.vs .ic { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+          color: #fff; font-size: .78rem; font-weight: 800; font-style: normal; }
+.vs .ok .ic { background: #12B76A; } .vs .bad .ic { background: #D92D20; }
+.vs .vk { font-size: .78rem; color: #667085; }
+.vs .vv { font-size: 1rem; font-weight: 800; letter-spacing: -.02em; }
+.vs .ok .vv { color: #12B76A; } .vs .bad .vv { color: #D92D20; }
+.vs .vn { grid-column: 2 / 4; font-size: .76rem; color: #667085; margin-top: .25rem; line-height: 1.4; }
+.vs .vf { font-size: .7rem; color: #98A2B3; border-top: 1px solid #F2F4F7; margin-top: .7rem; padding-top: .5rem; }
 .wave { position: absolute; left: 0; bottom: -1px; width: 100%; height: 150px; z-index: 1; display: block; }
 @media (max-width: 900px) {
   .hero-in { grid-template-columns: 1fr; min-height: 0; padding-top: 2.4rem; }
   .hero-art { height: 340px; margin-top: .5rem; justify-content: flex-end; padding-right: 6%; }
   .hero-art .charger { height: 320px; }
-  .scan { left: 0; top: 57%; width: 205px; padding: .65rem .8rem; }
-  .scan .b { font-size: .76rem; }
+  .vs { left: 0; top: 50%; width: 236px; padding: .7rem .8rem .6rem; }
+  .vs:after { display: none; }
+  .vs .vr { grid-template-columns: 1.3rem 3.6rem 1fr; }
+  .vs .vv { font-size: .88rem; }
   .wave { height: 90px; }
 }
 .home-h { font-size: 1.15rem; font-weight: 800; color: #101828; margin: 1.6rem 0 .1rem; letter-spacing: -.02em; }
@@ -450,15 +471,19 @@ def hidden_example():
 def home():
     st.html(HOME_CSS)
     ex = hidden_example()
+    # 겉(화면 표시)과 속(실제 이용 기록)을 한 카드에서 비교
     if ex is not None:
-        card = (f"<div class='scan'><div class='h'><i></i>AI 진단 · 숨은 고장 의심</div>"
-                f"<div class='t'>{html.escape(str(ex['statNm']))} {html.escape(str(ex['chgerId']))}번</div>"
-                f"<div class='b'>화면은 '사용 가능'이지만 {html.escape(str(ex['근거']))}</div>"
-                f"<div class='f'>{attrs['now']:%m월 %d일 %H:%M} 실제 진단 결과</div></div>")
+        who = "옆 충전기들은" if ex["code"] == "B1" else "주변 충전기들은"
+        name = f"{html.escape(str(ex['statNm']))} {html.escape(str(ex['chgerId']))}번"
+        real = f"{ex['방치']}째 충전 0회"
+        note = f"{who} 하루 평균 {ex['lam']:.1f}회 충전" if pd.notna(ex.get("lam")) else ""
+        foot = f"{attrs['now']:%m월 %d일 %H:%M} 실제 진단 결과 · 숨은 고장 의심"
     else:
-        card = ("<div class='scan'><div class='h'><i></i>AI 진단 · 숨은 고장 의심</div>"
-                "<div class='t'>멀쩡한 척하는 충전기</div>"
-                "<div class='b'>화면은 '사용 가능'이지만 며칠째 충전이 0회</div></div>")
+        name, real, note, foot = "멀쩡한 척하는 충전기", "며칠째 충전 0회", "", "숨은 고장 의심"
+    card = (f"<div class='vs'><div class='vh'><span class='vb'>AI 진단</span>{name}</div><div class='rows'>"
+            "<div class='vr ok'><i class='ic'>✓</i><span class='vk'>겉으로는</span><span class='vv'>사용 가능</span></div>"
+            f"<div class='vr bad'><i class='ic'>!</i><span class='vk'>실제로는</span><span class='vv'>{real}</span>"
+            f"<span class='vn'>{note}</span></div></div><div class='vf'>{foot}</div></div>")
     feats = [("robot", "숨은 고장을 찾아주는 AI 에이전트"), ("shield", "전기차 충전기 관리자의 든든한 조력자"),
              ("users", "사용자들의 불편함을 해소")]
     st.markdown(
@@ -594,15 +619,26 @@ def op_page():
                           help="주의는 대부분 완충 후 주차 등 일시적인 경우입니다.")
         lst = mine if all_g else alarm
         if len(lst):
-            st.dataframe(table_cols(lst)[["충전소", "충전기 번호", "고유번호", "판정", "등급", "방치"]],
+            # 방치 기간까지 한눈에: 좁은 칸은 작게, 고유번호는 맨 뒤로
+            st.dataframe(table_cols(lst).rename(columns={"충전기 번호": "번호"})[
+                             ["충전소", "번호", "판정", "등급", "방치", "고유번호"]],
                          hide_index=True, width="stretch", height=420,
-                         column_config={"충전기 번호": st.column_config.TextColumn(help="운영사가 충전소 안에서 붙인 번호"),
+                         column_config={"번호": st.column_config.TextColumn(width="small", help="운영사가 충전소 안에서 붙인 번호"),
+                                        "등급": st.column_config.TextColumn(width="small"),
+                                        "방치": st.column_config.TextColumn(width="small", help="고장 상태가 이어진 기간"),
                                         "고유번호": st.column_config.TextColumn(help="환경부 통합 충전기 ID")})
             st.download_button("목록 내려받기 (CSV)", table_cols(lst)[["충전소", "충전기 번호", "고유번호", "종류", "판정", "등급",
                                                                        "방치", "근거", "addr"]].rename(columns={"addr": "주소"})
                                .to_csv(index=False).encode("utf-8-sig"), f"{op}_점검목록.csv", on_click="ignore")
         else:
             st.info("해당하는 충전기가 없습니다.")
+
+
+CIT_COLOR = {"사용 가능": "#12B76A", "충전 중": "#2E90FA", "방문 전 확인": "#EAAA08", "이용 불가": "#D92D20"}
+
+
+def short_addr(a):
+    return re.sub(r"^제주특별자치도\s*", "", str(a))
 
 
 def cit_status(r):
@@ -663,21 +699,27 @@ def cit_page():
             st.markdown("<div class='sec' style='margin-top:0'>많이 이용하는 충전소 10곳</div>", unsafe_allow_html=True)
             st.caption("최근 수집 기간 충전 횟수 기준 · 지금 상태를 함께 보여 드립니다")
             g = g.sort_values("이용", ascending=False).head(10)
-        tone = {"사용 가능": "#E7F6EC", "충전 중": "#EEF4FF", "방문 전 확인": "#FEF7E0", "이용 불가": "#FEE4E2"}
+        if focus_id:   # 지금 지도에서 보고 있는 충전소 카드는 파란 테두리
+            st.html(f"<style>.st-key-card_{focus_id} {{ border-color: #1D4ED8 !important; "
+                    "box-shadow: 0 0 0 1px #1D4ED8; }</style>")
         with st.container(height=520, border=False, key="cit_list"):
             for _, r in g.head(30).iterrows():
-                chips = "".join(f"<span class='chip' style='background:{tone[s]}'>{s} {int(r[s])}</span>"
-                                for s in order if r[s])
-                with st.container(border=True):
-                    a, b = st.columns([4, 1.4], gap="medium", vertical_alignment="center")
-                    a.markdown(f"<div class='cn'>{r['statNm']}</div><div class='ca'>{r['addr']}</div>"
-                               f"<div class='chips'><span class='chip'>급속 {int(r['급속'])} · 완속 {int(r['완속'])} · 전체 {int(r['전체'])}</span></div>"
-                               f"<div class='chips' style='margin-top:.35rem'>{chips}</div>", unsafe_allow_html=True)
-                    on = r["statId"] == focus_id
-                    if b.button("보는 중" if on else "지도에서 보기", key=f"go_{r['statId']}", width="stretch",
-                                type="primary" if on else "secondary", disabled=on):
-                        st.session_state["cit_focus"] = r["statId"]
-                        st.rerun()
+                n_ok = int(r["사용 가능"])
+                bar = "".join(f"<i style='flex:{int(r[s])};background:{CIT_COLOR[s]}'></i>" for s in order if r[s])
+                leg = "".join(f"<span><b style='background:{CIT_COLOR[s]}'></b>{s} {int(r[s])}</span>" for s in order if r[s])
+                with st.container(border=True, key=f"card_{r['statId']}"):
+                    with st.container(horizontal=True, vertical_alignment="top", gap="small"):
+                        st.markdown(f"<div class='cn'>{html.escape(str(r['statNm']))}</div>"
+                                    f"<div class='ca'>{html.escape(short_addr(r['addr']))} · 급속 {int(r['급속'])} · "
+                                    f"완속 {int(r['완속'])}</div>", unsafe_allow_html=True)
+                        on = r["statId"] == focus_id
+                        if st.button("보는 중" if on else "지도", icon=":material/location_on:", key=f"go_{r['statId']}",
+                                     type="primary" if on else "secondary", disabled=on):
+                            st.session_state["cit_focus"] = r["statId"]
+                            st.rerun()
+                    st.markdown(f"<div class='big'><span style='color:{'#12B76A' if n_ok else '#D92D20'}'>{n_ok}</span>"
+                                f"<em>/ {int(r['전체'])}대 지금 사용 가능</em></div>"
+                                f"<div class='sbar'>{bar}</div><div class='sleg'>{leg}</div>", unsafe_allow_html=True)
         if len(g) > 30:
             st.caption(f"외 {len(g) - 30}곳. 검색어를 더 좁혀 보세요.")
 
@@ -701,7 +743,7 @@ st.markdown(
     f"<div class='foot'>기준 시각 {attrs['now']:%Y-%m-%d %H:%M} · 수집 기간 {attrs['t_first']:%m/%d}~{attrs['now']:%m/%d} "
     f"(30분 간격, {attrs['n_snaps']}회)<br>"
     "데이터: 한국환경공단 전기자동차 충전소 정보 API · 제주데이터허브 [인구, 생활] 전기자동차 충전소 정보(862, 2025.9.21 기준) · "
-    "한국전력공사 전기차 충전소 충전량(2023.1~2026.9)<br>고장났수다 · 제주 AI·빅데이터 활용 AI Agent 개발 챌린지</div>",
+    "한국전력공사 전기차 충전소 충전량(2023.1~2026.9) · 배경 지도 © CARTO, © OpenStreetMap 기여자<br>고장났수다 · 제주 AI·빅데이터 활용 AI Agent 개발 챌린지</div>",
     unsafe_allow_html=True)
 
 # 위쪽 메뉴 오른쪽에 고정 (CSS .st-key-topbar)
