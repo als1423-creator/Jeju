@@ -8,6 +8,7 @@ import html
 import json
 import os
 import re
+import urllib.parse
 
 import altair as alt
 import numpy as np
@@ -52,9 +53,11 @@ JEJU = dict(lat=(33.10, 33.58), lng=(126.14, 126.98))   # 본섬 범위 (추자�
 
 # 선 아이콘 (24px 격자, 직접 그림)
 ICON = {
-    "robot": '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V5"/><circle cx="12" cy="3.6" r="1.3"/>'
-             '<circle cx="9" cy="13.6" r="1.2" fill="currentColor" stroke="none"/>'
-             '<circle cx="15" cy="13.6" r="1.2" fill="currentColor" stroke="none"/><path d="M9.6 17.1h4.8M2.6 12.5v3.2M21.4 12.5v3.2"/>',
+    # AI 에이전트: "AI" 글자 + 반짝이 (글꼴 없이 그린 모양)
+    "robot": '<g fill="currentColor" stroke="none" fill-rule="evenodd">'
+             '<path d="M2.5 20 7.3 7h2.9l4.8 13h-2.9l-1.05-3H6.45L5.4 20zM7.25 14.6h3.5L9 9.4z"/>'
+             '<path d="M16.4 7h2.8v13h-2.8z"/>'
+             '<path d="M21 1.6l.75 1.75 1.75.75-1.75.75L21 6.6l-.75-1.75-1.75-.75 1.75-.75z"/></g>',
     "shield": '<path d="M12 2.8 19.6 5.7v5.5c0 4.6-3.2 8.4-7.6 10-4.4-1.6-7.6-5.4-7.6-10V5.7z"/><path d="m8.6 12.1 2.4 2.4 4.5-4.6"/>',
     "users": '<circle cx="12" cy="8.4" r="3.3"/><path d="M5.7 20.2c.5-3.5 3-5.8 6.3-5.8s5.8 2.3 6.3 5.8"/>'
              '<circle cx="5.5" cy="9.6" r="2.3"/><path d="M1.7 17.9c.3-2.3 1.8-3.8 3.9-4"/>'
@@ -179,6 +182,33 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .agent-st i { width: .5rem; height: .5rem; border-radius: 50%; }
 .agent-empty { color: #667085; font-size: .9rem; background: #F9FAFB; border: 1px dashed #D0D5DD; border-radius: 12px; padding: 1rem 1.1rem; line-height: 1.7; }
 .foot { border-top: 1px solid #EAECF0; margin-top: 2.5rem; padding-top: .9rem; color: #98A2B3; font-size: .76rem; line-height: 1.7; }
+
+/* 오른쪽 아래 떠 있는 'AI에게 묻기' 버튼 (모든 화면) */
+[data-testid="stMainBlockContainer"] { padding-bottom: 6.5rem; }   /* 맨 아래 출처가 버튼에 가리지 않게 */
+.st-key-askfab { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 999989; width: auto !important; }
+.st-key-askfab button { height: 52px; border: none !important; border-radius: 999px; padding: 0 1.15rem 0 .45rem; gap: .55rem;
+  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 55%, #1E3A8A 100%); color: #fff !important;
+  box-shadow: 0 10px 24px rgba(29, 78, 216, .35), 0 2px 6px rgba(16, 24, 40, .15); transition: transform .15s, box-shadow .15s; }
+.st-key-askfab button:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(29, 78, 216, .42), 0 2px 6px rgba(16, 24, 40, .15); }
+.st-key-askfab button:active { transform: translateY(0); }
+.st-key-askfab button::before { content: ""; width: 38px; height: 38px; border-radius: 50%; flex: none;
+  background: rgba(255, 255, 255, .16) url("__FABICON__") center / 23px no-repeat; }
+.st-key-askfab button p { color: #fff; font-weight: 700; font-size: 15px; white-space: nowrap; }
+body:has([data-testid="stDialog"]) .st-key-askfab { display: none; }   /* 창이 열리면 버튼은 숨김 */
+@media (max-width: 760px) {
+  .st-key-askfab { right: 1rem; bottom: 1rem; }
+  .st-key-askfab button { height: 48px; padding-right: 1rem; }
+  .st-key-askfab button::before { width: 34px; height: 34px; background-size: 21px; }
+}
+/* 'AI에게 묻기' 창 안 */
+.fab-sub { display: flex; align-items: center; gap: .5rem; color: #667085; font-size: .84rem; margin: -.4rem 0 .2rem; }
+.fab-sub svg { flex: none; }
+.st-key-fab_chips { flex-wrap: wrap; gap: .4rem; }
+.st-key-fab_chips button { border-radius: 999px; min-height: 2.1rem; padding: .2rem .8rem; }
+.st-key-fab_chips button p { font-size: .86rem; white-space: nowrap; }
+.st-key-fab_row { flex-wrap: nowrap; gap: .4rem; }
+.st-key-fab_ans { background: #F9FAFB; border: none !important; border-radius: 12px; }
+.st-key-fab_ans table { font-size: .82rem; }
 </style>
 """
 
@@ -609,16 +639,11 @@ def op_page():
         st.markdown(f"<div class='msg'><div class='h'>[고장났수다] {op} 점검 요청</div>"
                     f"<div class='t'>{attrs['now']:%m월 %d일 %H:%M} 기준 · 경보 {len(alarm)}건 중 상위 {len(top)}건</div>"
                     f"{items or '<div class=i>오늘 경보가 없습니다.</div>'}</div>", unsafe_allow_html=True)
-        tok, chat = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
-        if st.button("텔레그램으로 보내기", icon=":material/send:", disabled=not (tok and chat),
-                     help=None if tok and chat else "텔레그램 봇 설정 후 사용할 수 있습니다."):
-            import urllib.parse
-            import urllib.request
-            text = "\n".join([f"[고장났수다] {op} 점검 요청 ({attrs['now']:%m/%d %H:%M})"] +
-                             [f"{n}. {r.statNm} {r.chgerId}번 · {r.판정}\n   {r.근거}" for n, r in enumerate(top.itertuples(), 1)])
-            urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/sendMessage?" +
-                                   urllib.parse.urlencode({"chat_id": chat, "text": text}), timeout=15)
-            st.success("보냈습니다.")
+        ready = telegram_ready()
+        if st.button("확인하고 텔레그램으로 보내기", icon=":material/send:", disabled=not ready or not len(top),
+                     help=None if ready else "텔레그램 봇 설정 후 사용할 수 있습니다."):
+            ok, msg = telegram_send(A.t_operator_message(d, attrs, op)["초안"])
+            (st.success if ok else st.error)(msg)
     with b:
         st.markdown("<div class='sec'>점검 목록</div>", unsafe_allow_html=True)
         all_g = st.toggle("주의·관찰도 보기", value=False, key="op_all",
@@ -730,17 +755,41 @@ def cit_page():
             st.caption(f"외 {len(g) - 30}곳. 검색어를 더 좁혀 보세요.")
 
 
-def openai_key():
-    k = os.environ.get("OPENAI_API_KEY", "").strip()
+def secret(name):
+    """환경변수 → 스트림릿 Secrets 순서로 찾기 (키는 코드·깃허브에 두지 않는다)"""
+    k = os.environ.get(name, "").strip()
     if not k:
         try:
-            k = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+            k = str(st.secrets.get(name, "")).strip()
         except Exception:   # secrets 파일이 없으면 오류가 나므로 무시
             k = ""
     return k
 
 
-def show_turn(m):
+def openai_key():
+    return secret("OPENAI_API_KEY")
+
+
+def telegram_ready():
+    return bool(secret("TELEGRAM_TOKEN") and secret("TELEGRAM_CHAT_ID"))
+
+
+def telegram_send(text):
+    """담당자가 버튼을 눌렀을 때만 호출. (성공 여부, 안내 문구)"""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    tok, chat = secret("TELEGRAM_TOKEN"), secret("TELEGRAM_CHAT_ID")
+    try:
+        data = urllib.parse.urlencode({"chat_id": chat, "text": text[:4000]}).encode()
+        with urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/sendMessage", data=data, timeout=15) as r:
+            ok = json.load(r).get("ok", False)
+        return ok, "텔레그램으로 보냈습니다." if ok else "텔레그램이 발송을 거절했습니다. 설정을 확인하세요."
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return False, f"보내지 못했습니다: {e}"
+
+
+def show_turn(m, idx=0):
     with st.chat_message(m["role"], avatar=":material/smart_toy:" if m["role"] == "assistant" else ":material/person:"):
         st.markdown(m["content"])
         if m["role"] != "assistant":
@@ -755,6 +804,111 @@ def show_turn(m):
                 for t in m["trace"]:
                     st.markdown(f"**{t['도구']}** `{json.dumps(t['입력'], ensure_ascii=False)}`")
                     st.json(t["결과"], expanded=False)
+        for j, t in enumerate(x for x in m.get("trace", []) if x["도구"] == "operator_message" and "초안" in x["결과"]):
+            with st.container(border=True):
+                st.markdown(f"**{t['결과']['운영기관']} 점검 요청서 초안** · 담당자가 확인한 뒤에만 보냅니다")
+                st.code(t["결과"]["초안"], language=None)
+                if m.get(f"sent_{j}"):
+                    st.success("보냈습니다.")
+                elif telegram_ready():
+                    if st.button("확인했습니다 · 텔레그램으로 보내기", icon=":material/send:", type="primary",
+                                 key=f"tg_{idx}_{j}"):
+                        ok, msg = telegram_send(t["결과"]["초안"])
+                        if ok:
+                            m[f"sent_{j}"] = True
+                            st.rerun()
+                        st.error(msg)
+                else:
+                    st.caption("텔레그램 봇을 설정하면 여기서 바로 보낼 수 있습니다.")
+
+
+FAB_ICON = "data:image/svg+xml," + urllib.parse.quote(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" '
+    'stroke-linecap="round" stroke-linejoin="round">' + ICON["robot"].replace("currentColor", "#fff") + '</svg>')
+
+
+def agent_reply(hist, q, key, preset=False):
+    """질문 하나를 처리해 대화 기록(hist)에 질문·답을 붙인다. AI 에이전트 화면과 떠 있는 버튼이 함께 쓴다."""
+    if preset:   # 질문 버튼: 키 없이도 코드가 바로 계산
+        txt, trace = A.preset_answer(d, attrs, q)
+        hist += [{"role": "user", "content": q},
+                 {"role": "assistant", "content": txt, "trace": trace, "checked": True, "bad": []}]
+        return
+    hist.append({"role": "user", "content": q})
+    if key:
+        try:
+            past = [{"role": m["role"], "content": m["content"]} for m in hist[:-1]]
+            ans, trace, bad = A.ask(d, attrs, q, history=past, key=key)
+            hist.append({"role": "assistant", "content": ans, "trace": trace, "checked": True, "bad": bad})
+        except RuntimeError as e:
+            hist.append({"role": "assistant", "content": f"지금은 AI에 연결하지 못했습니다. ({e}) 질문 버튼은 그대로 쓸 수 있습니다."})
+        return
+    res = A.t_search(d, attrs, q)   # 키가 없으면 충전소 검색만
+    if isinstance(res.get("결과"), list):
+        rows = [{k: r[k] for k in ["충전소", "주소", "사용 가능", "충전 중", "방문 전 확인", "이용 불가"]} for r in res["결과"]]
+        txt = (f"찾은 충전소 {res['충전소_수']}곳 중 지금 사용 가능한 충전기가 많은 {len(rows)}곳입니다. "
+               "(API 키가 없어 이름·지역 검색으로 찾았습니다)\n\n" + A.table_md(rows))
+        hist.append({"role": "assistant", "content": txt, "trace": [{"도구": "search_station", "입력": {"query": q}, "결과": res}],
+                     "checked": True, "bad": []})
+    else:
+        hist.append({"role": "assistant", "content": "API 키가 없어서 자유 질문은 충전소 이름·지역 검색만 됩니다. "
+                                                     "질문 버튼을 써 보세요."})
+
+
+# 떠 있는 버튼: 화면별 예시 질문 (버튼 글자, 실제 질문)
+FAB_Q = {
+    "home": [("오늘 경보 목록", "오늘 경보 목록"), ("1년 전과 비교", "1년 전(허브)과 비교"),
+             ("서귀포 급속 지금 되는 곳", "서귀포에서 지금 쓸 수 있는 급속 충전기 어디야?")],
+    "gov": [("운영기관별 현황", "운영기관별 현황"), ("1년 넘게 방치된 곳", "1년 넘게 방치된 곳"),
+            ("1년 전과 비교", "1년 전(허브)과 비교")],
+    "operator": [("오늘 경보 목록", "오늘 경보 목록"), ("환경부 통신 끊긴 충전기", "환경부 충전기 중 통신 끊긴 거 몇 대야?"),
+                 ("점검 요청서 써 줘", "제주에너지공사에 보낼 점검 요청서 써 줘")],
+    "citizen": [("서귀포 급속 지금 되는 곳", "서귀포에서 지금 쓸 수 있는 급속 충전기 어디야?"),
+                ("제주공항 근처 충전소", "제주공항 근처 충전소 알려줘"), ("1년 넘게 방치된 곳", "1년 넘게 방치된 곳")],
+}
+FAB_NAME = {"home": "홈", "gov": "공공기관", "operator": "운영사", "citizen": "도민"}
+
+
+def _dialog(title):
+    try:
+        return st.dialog(title, width="small", icon=":material/auto_awesome:")
+    except TypeError:   # 옛 버전에는 icon이 없음
+        return st.dialog(title, width="small")
+
+
+@_dialog("AI에게 묻기")
+def ask_dialog(where):
+    key = openai_key()
+    hist = st.session_state.setdefault("chat", [])
+    st.markdown(f"<div class='fab-sub'>지금 보는 화면({FAB_NAME[where]})에 맞춘 질문이에요"
+                + ("" if key else " · API 키가 없어 검색·질문 버튼만 됩니다") + "</div>", unsafe_allow_html=True)
+    picked = None
+    with st.container(horizontal=True, key="fab_chips"):
+        for i, (label, q) in enumerate(FAB_Q[where]):
+            if st.button(label, key=f"fabq_{where}_{i}"):
+                picked = q
+    with st.form("fab_form", clear_on_submit=True, border=False):
+        with st.container(horizontal=True, key="fab_row", vertical_alignment="bottom"):
+            typed = st.text_input("질문", placeholder="궁금한 걸 물어보세요", label_visibility="collapsed")
+            sent = st.form_submit_button("", icon=":material/send:", type="primary", width="content", key="fab_send")
+    q = picked or (typed.strip() if sent and typed else "")
+    if q:
+        with st.spinner("에이전트가 데이터를 찾고 계산하는 중입니다"):
+            agent_reply(hist, q, key, preset=q in A.PRESETS)
+        st.session_state["fab_last"] = len(hist)
+    if st.session_state.get("fab_last") and hist and hist[-1]["role"] == "assistant":
+        m = hist[-1]
+        with st.container(height=320, key="fab_ans"):
+            st.markdown(m["content"])
+            if m.get("checked"):
+                if m.get("bad"):
+                    st.warning(f"데이터에서 확인되지 않은 숫자: {', '.join(m['bad'])}")
+                else:
+                    st.caption("✓ 답 속 숫자를 모두 데이터 계산 결과와 대조했습니다.")
+            if any(t["도구"] == "operator_message" for t in m.get("trace", [])):
+                st.caption("요청서 초안 확인과 텔레그램 발송은 AI 에이전트 화면에서 할 수 있어요.")
+    if st.button("AI 에이전트 화면에서 계속", icon=":material/arrow_forward:", width="stretch", key="fab_go"):
+        st.switch_page(PAGES["agent"])
 
 
 def agent_page():
@@ -777,36 +931,16 @@ def agent_page():
                 st.rerun()
         q = st.chat_input("예: 서귀포에서 지금 쓸 수 있는 급속 충전기 어디야?")
         if picked:
-            txt, trace = A.preset_answer(d, attrs, picked)
-            hist += [{"role": "user", "content": picked},
-                     {"role": "assistant", "content": txt, "trace": trace, "checked": True, "bad": []}]
+            agent_reply(hist, picked, key, preset=True)
         elif q:
-            hist.append({"role": "user", "content": q})
-            if key:
-                with st.spinner("에이전트가 데이터를 찾고 계산하는 중입니다"):
-                    try:
-                        past = [{"role": m["role"], "content": m["content"]} for m in hist[:-1]]
-                        ans, trace, bad = A.ask(d, attrs, q, history=past, key=key)
-                        hist.append({"role": "assistant", "content": ans, "trace": trace, "checked": True, "bad": bad})
-                    except RuntimeError as e:
-                        hist.append({"role": "assistant", "content": f"지금은 AI에 연결하지 못했습니다. ({e}) 위 질문 버튼은 그대로 쓸 수 있습니다."})
-            else:   # 키가 없으면 충전소 검색만
-                res = A.t_search(d, attrs, q)
-                if isinstance(res.get("결과"), list):
-                    rows = [{k: r[k] for k in ["충전소", "주소", "사용 가능", "충전 중", "방문 전 확인", "이용 불가"]} for r in res["결과"]]
-                    txt = (f"찾은 충전소 {res['충전소_수']}곳 중 지금 사용 가능한 충전기가 많은 {len(rows)}곳입니다. "
-                           "(API 키가 없어 이름·지역 검색으로 찾았습니다)\n\n" + A.table_md(rows))
-                    hist.append({"role": "assistant", "content": txt, "trace": [{"도구": "search_station", "입력": {"query": q}, "결과": res}],
-                                 "checked": True, "bad": []})
-                else:
-                    hist.append({"role": "assistant", "content": "API 키가 없어서 자유 질문은 충전소 이름·지역 검색만 됩니다. "
-                                                                 "위 질문 버튼을 써 보세요."})
+            with st.spinner("에이전트가 데이터를 찾고 계산하는 중입니다"):
+                agent_reply(hist, q, key)
         if not hist:
             st.markdown("<div class='agent-empty'>위 버튼을 누르거나 아래에 질문을 입력하세요.<br>"
                         "예: \"환경부 충전기 중 통신 끊긴 거 몇 대야?\", \"성산공설묘지 충전기 상태 알려줘\", "
                         "\"제주에너지공사에 보낼 점검 요청서 써 줘\"</div>", unsafe_allow_html=True)
-        for m in hist:
-            show_turn(m)
+        for i, m in enumerate(hist):
+            show_turn(m, i)
     with t2:
         names = ["공공 운영기관 전체"] + [BUSI[b] for b in BUSI if (pub["busiId"] == b).any()]
         c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
@@ -846,7 +980,7 @@ PAGES = {
     "agent": st.Page(agent_page, title="AI 에이전트", icon=":material/smart_toy:", url_path="agent"),
 }
 nav = st.navigation(list(PAGES.values()), position="top")
-st.html(CSS)
+st.html(CSS.replace("__FABICON__", FAB_ICON))
 d, attrs, coord_err = load(data_sig())
 pub = d[d["busiId"].isin(PUBLIC)]
 
@@ -863,3 +997,10 @@ st.markdown(
 with st.container(key="topbar", horizontal=True, vertical_alignment="center"):
     st.markdown(f"<span class='live'><i></i>{attrs['now']:%m/%d %H:%M} 기준 · 30분마다 갱신</span>",
                 unsafe_allow_html=True, width="content")
+
+# 오른쪽 아래 떠 있는 'AI에게 묻기' (CSS .st-key-askfab). AI 에이전트 화면에서는 숨김
+where = nav.url_path or "home"
+if where != "agent" and where in FAB_Q:
+    if st.button("AI에게 묻기", key="askfab", help="지금 화면에 맞춘 질문을 AI 에이전트에게 바로 물어볼 수 있습니다"):
+        st.session_state["fab_last"] = 0   # 새로 열 때는 빈 창
+        ask_dialog(where)
