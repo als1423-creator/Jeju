@@ -23,6 +23,6 @@ if errorlevel 1 (
 )
 
 echo [2/2] 화면 여는 중... 브라우저가 자동으로 열립니다. 끄려면 이 창을 닫으세요.
-echo 첫 화면은 진단 계산 때문에 1분 정도 걸립니다.
+echo 첫 화면은 진단 계산 때문에 20초 정도 걸립니다.
 python -m streamlit run app.py
 pause

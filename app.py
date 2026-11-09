@@ -316,7 +316,7 @@ def data_sig():
     return tuple((f, os.path.getsize(f), int(os.path.getmtime(f))) for f in fs)
 
 
-@st.cache_data(ttl=1800, max_entries=2, show_spinner="진단 계산 중입니다 (약 1분)")
+@st.cache_data(ttl=1800, max_entries=2, show_spinner="진단 계산 중입니다 (약 20초)")
 def load(sig):
     d = diagnose()
     attrs = dict(d.attrs)

@@ -83,6 +83,8 @@ flowchart LR
 1. `python -m guardian.freeze freeze` → `predictions/<날짜_시각>/`에 숨은 고장 상위 20대, 수리 우선 20대, 비교용 정상 20대, 코드·데이터 지문(md5)을 저장
 2. 7일 뒤 `python -m guardian.freeze score predictions/<폴더>` → 이후 실제 이용 기록으로 적중 여부 채점
 
+고정에 쓴 코드는 `manifest.json`에 적힌 지문(md5)의 버전이며 깃허브 기록에 남아 있습니다. 고정 뒤 `diagnose.py`는 계산 속도만 개선했고(약 34초 → 7초), 같은 데이터로 돌려 고정 파일과 **바이트까지 같은 결과**가 나오는 것을 확인했습니다.
+
 ## 폴더 구조
 
 ```
@@ -120,7 +122,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-브라우저에서 `http://localhost:8501`이 열립니다. 저장소에 들어 있는 `data/`로 바로 진단하며, 첫 화면은 진단 계산 때문에 1분 정도 걸립니다.
+브라우저에서 `http://localhost:8501`이 열립니다. 저장소에 들어 있는 `data/`로 바로 진단하며, 첫 화면은 진단 계산 때문에 20초 정도 걸립니다.
 
 **선택 설정** (없어도 실행됩니다): `.env.example`을 복사해 `.env`로 이름을 바꾸고 값을 채웁니다. `run.bat`이 자동으로 불러옵니다. 다른 방법으로는 `.streamlit/secrets.toml`이나 환경변수에 같은 이름으로 넣어도 됩니다.
 
