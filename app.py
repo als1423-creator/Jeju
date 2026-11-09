@@ -170,6 +170,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .cn { font-weight: 700; color: #101828; font-size: 1rem; }
 .ca { color: #667085; font-size: .8rem; margin-top: .1rem; }
 .st-key-cit_list button p { white-space: nowrap; }
+.st-key-cit_list [class*="st-key-go_"] button { min-width: 6.4rem; }   /* 지도·보는 중 버튼 폭 통일 */
 .big { display: flex; align-items: baseline; gap: .4rem; margin-top: -.15rem; }
 .big span { font-size: 1.65rem; font-weight: 800; line-height: 1; }
 .big em { font-style: normal; font-size: .82rem; color: #475467; }
@@ -746,8 +747,8 @@ def cit_page():
                     with st.container(horizontal=True, vertical_alignment="top", gap="small"):
                         st.markdown(f"<div class='cn'>{html.escape(str(r['statNm']))}</div>"
                                     f"<div class='ca'>{html.escape(short_addr(r['addr']))} · 급속 {int(r['급속'])} · "
-                                    f"완속 {int(r['완속'])}</div>", unsafe_allow_html=True)
-                        on = r["statId"] == focus_id
+                                    f"완속 {int(r['완속'])}</div>", unsafe_allow_html=True, width="stretch")
+                        on = r["statId"] == focus_id   # 글자 칸이 남는 폭을 다 차지 → 지도 버튼은 항상 카드 오른쪽 끝
                         if st.button("보는 중" if on else "지도", icon=":material/location_on:", key=f"go_{r['statId']}",
                                      type="primary" if on else "secondary", disabled=on):
                             st.session_state["cit_focus"] = r["statId"]
