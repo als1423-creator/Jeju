@@ -87,6 +87,8 @@ flowchart LR
 
 ```
 app.py                  웹 화면 (Streamlit)
+run.bat                 윈도우에서 더블클릭으로 실행
+.env.example            키 설정 예시 (실제 키는 .env, 저장소에 올리지 않음)
 collect.py              환경공단 API 수집기 (30분마다 실행)
 hub_stations.py         제주데이터허브 862 충전소 목록 내려받기
 guardian/
@@ -101,6 +103,7 @@ data/
   hub/stations.json     제주데이터허브 862 충전소 정보 (2025-09-21 기준)
   kepco_jeju_public_2023_2026.csv.gz   한전 충전 이력 (기준 검증용)
 docs/데이터_명세서.md     데이터 출처·항목·진단 규칙 상세
+predictions/            고정한 예측과 채점 결과 (예측 고정과 검증 참고)
 .github/workflows/      GitHub Actions 수집 설정 (초기 수집용)
 ```
 
@@ -108,22 +111,25 @@ docs/데이터_명세서.md     데이터 출처·항목·진단 규칙 상세
 
 Python 3.11 이상이 필요합니다.
 
+**윈도우**: `run.bat`을 더블클릭하면 필요한 프로그램을 설치하고 화면을 엽니다.
+
+**그 밖의 환경**:
+
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-브라우저에서 `http://localhost:8501`이 열립니다. 저장소에 들어 있는 `data/`로 바로 진단합니다.
+브라우저에서 `http://localhost:8501`이 열립니다. 저장소에 들어 있는 `data/`로 바로 진단하며, 첫 화면은 진단 계산 때문에 1분 정도 걸립니다.
 
-**선택 설정** (없어도 실행됩니다): `.streamlit/secrets.toml` 파일이나 환경변수로 넣습니다.
+**선택 설정** (없어도 실행됩니다): `.env.example`을 복사해 `.env`로 이름을 바꾸고 값을 채웁니다. `run.bat`이 자동으로 불러옵니다. 다른 방법으로는 `.streamlit/secrets.toml`이나 환경변수에 같은 이름으로 넣어도 됩니다.
 
-```toml
-OPENAI_API_KEY = "..."      # AI 에이전트 자유 질문
-TELEGRAM_TOKEN = "..."      # 운영사 알림 발송
-TELEGRAM_CHAT_ID = "..."
-```
-
-**수집기를 직접 돌릴 때**: 공공데이터포털 '한국환경공단_전기자동차 충전소 정보' 인증키를 `KECO_KEY` 환경변수에 넣고 `python collect.py`를 실행합니다.
+| 이름 | 용도 |
+|---|---|
+| `OPENAI_API_KEY` | AI 에이전트 자유 질문 (없으면 질문 버튼·검색·보고서만 동작) |
+| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | 운영사 알림 발송 |
+| `KECO_KEY` | 데이터 직접 수집 (`python collect.py`) |
+| `HUB_KEY` | 허브 862 다시 내려받기 (`python hub_stations.py` → `data/hub/stations.json`) |
 
 > 키와 토큰은 저장소에 올리지 않습니다. 배포 사이트는 Streamlit Cloud의 Secrets에만 저장합니다.
 
