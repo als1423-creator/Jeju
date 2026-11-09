@@ -200,6 +200,7 @@ body:has([data-testid="stDialog"]) .st-key-askfab { display: none; }   /* 창이
   .st-key-askfab button { height: 48px; padding-right: 1rem; }
   .st-key-askfab button::before { width: 34px; height: 34px; background-size: 21px; }
 }
+.agent-prev { color: #98A2B3; font-size: .8rem; font-weight: 600; margin: 1.2rem 0 .2rem; padding-top: .8rem; border-top: 1px solid #EAECF0; }
 /* 'AI에게 묻기' 창 안 */
 .fab-sub { display: flex; align-items: center; gap: .5rem; color: #667085; font-size: .84rem; margin: -.4rem 0 .2rem; }
 .fab-sub svg { flex: none; }
@@ -314,7 +315,7 @@ def data_sig():
     return tuple((f, os.path.getsize(f), int(os.path.getmtime(f))) for f in fs)
 
 
-@st.cache_data(ttl=1800, max_entries=2, show_spinner="진단 계산 중입니다 (약 20초)")
+@st.cache_data(ttl=1800, max_entries=2, show_spinner="진단 계산 중입니다 (약 1분)")
 def load(sig):
     d = diagnose()
     attrs = dict(d.attrs)
@@ -620,7 +621,10 @@ def gov_page():
 def op_page():
     page_head("운영사", "op", "내 충전기 중 손볼 곳을 점검 순서대로 정리해 알림으로 보냅니다.", NOTE["op"])
     ops = pub.groupby("운영기관").size().sort_values(ascending=False).index.tolist()
-    op = st.selectbox("운영사", ops, label_visibility="collapsed")
+    try:   # 펼치는 목록은 스크롤하면 닫혀서, 4곳을 버튼으로 한 줄에 (하나는 항상 선택됨)
+        op = st.pills("운영사", ops, default=ops[0], required=True, key="op_pick", label_visibility="collapsed")
+    except TypeError:   # 옛 버전에는 required가 없음
+        op = st.pills("운영사", ops, default=ops[0], key="op_pick", label_visibility="collapsed") or ops[0]
     mine = pub[(pub["운영기관"] == op) & (pub["트랙"] == "수리")].sort_values("raw", ascending=False).reset_index(drop=True)
     alarm = mine[mine["grade"] == "경보"].reset_index(drop=True)
     st.markdown("<div class='kpis' style='grid-template-columns:repeat(3,1fr)'>" +
@@ -939,8 +943,16 @@ def agent_page():
             st.markdown("<div class='agent-empty'>위 버튼을 누르거나 아래에 질문을 입력하세요.<br>"
                         "예: \"환경부 충전기 중 통신 끊긴 거 몇 대야?\", \"성산공설묘지 충전기 상태 알려줘\", "
                         "\"제주에너지공사에 보낼 점검 요청서 써 줘\"</div>", unsafe_allow_html=True)
-        for i, m in enumerate(hist):
-            show_turn(m, i)
+        # 입력칸이 위에 있으니 최신 질문·답을 맨 위에, 이전 대화는 그 아래로
+        starts = [i for i, m in enumerate(hist) if m["role"] == "user"] or [0]
+        if starts[0] != 0:
+            starts = [0] + starts
+        ends = starts[1:] + [len(hist)]
+        for n, (a, b) in enumerate(reversed(list(zip(starts, ends)))):
+            if n == 1:
+                st.markdown("<div class='agent-prev'>이전 대화</div>", unsafe_allow_html=True)
+            for i in range(a, b):
+                show_turn(hist[i], i)
     with t2:
         names = ["공공 운영기관 전체"] + [BUSI[b] for b in BUSI if (pub["busiId"] == b).any()]
         c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
