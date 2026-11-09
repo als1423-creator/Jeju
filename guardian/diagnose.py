@@ -39,7 +39,10 @@ CONF = {"A1": 1.0, "A2": 0.9, "A3": 0.8, "A4": 0.7}
 
 
 def _ts(s):
-    return pd.to_datetime(s, format="%Y%m%d%H%M%S", errors="coerce")
+    """'YYYYMMDDhhmmss' 글자 → 시각. 같은 값이 많아서 서로 다른 값만 한 번씩 바꾼 뒤 펼친다 (결과는 같음)"""
+    u = pd.Series(pd.unique(s))
+    conv = pd.Series(pd.to_datetime(u, format="%Y%m%d%H%M%S", errors="coerce").values, index=u.values)
+    return s.map(conv)
 
 
 def _pct(p):
@@ -172,36 +175,35 @@ def diagnose():
     ss = sessions(s)
     ss_k = ss.set_index(["statId", "chgerId"])
     first_seen = s.groupby(["statId", "chgerId"])["t"].min()
-    win = ss[ss["start"] > ss.set_index(["statId", "chgerId"]).index.map(first_seen).values]
+    fs_of = ss[["statId", "chgerId"]].merge(first_seen.rename("fs").reset_index(), on=["statId", "chgerId"], how="left")["fs"]
+    win = ss[ss["start"] > fs_of.values]
     k_win = win.groupby(["statId", "chgerId"]).size()
     succ = ss[~ss["short"]].groupby(["statId", "chgerId"])["start"].max()
     anyl = ss.groupby(["statId", "chgerId"])["start"].agg(["min", "max"])
-    cur["k"] = [int(k_win.get(k, 0)) for k in key]
+    mi = pd.MultiIndex.from_tuples(key, names=["statId", "chgerId"])
+    cur["k"] = k_win.reindex(mi, fill_value=0).astype(int).values
     # 마지막 '성공' 충전: 성공 세션이 없으면 관측된 가장 이른 세션 시각(보수적)
-    cur["last_ok"] = [succ.get(k, anyl["min"].get(k, pd.NaT)) if k in anyl.index else pd.NaT for k in key]
-    cur["last_any"] = [anyl["max"].get(k, pd.NaT) if k in anyl.index else pd.NaT for k in key]
+    cur["last_ok"] = succ.reindex(mi).fillna(anyl["min"].reindex(mi)).values
+    cur["last_any"] = anyl["max"].reindex(mi).values
 
     # 현재 상태가 이어진 시간: max(지금-statUpdDt, 지금-스냅샷 기준 연속 시작)
     sg = s.merge(cur[["statId", "chgerId"]], on=["statId", "chgerId"])
     sg["cls"] = np.where(sg["stat"].isin(ERR), "E", sg["stat"])
-    run_start = {}
-    for k, g in sg.groupby(["statId", "chgerId"]):
-        c = g["cls"].values
-        i = len(c) - 1
-        while i > 0 and c[i - 1] == c[-1]:
-            i -= 1
-        run_start[k] = g["t"].values[i]
+    # 마지막 상태 구간의 시작 = 충전기별로 '앞 기록과 상태가 달라진' 마지막 행 (첫 행 포함)
+    prev = sg.groupby(["statId", "chgerId"])["cls"].shift()
+    run_start = sg[prev.isna() | (sg["cls"] != prev)].groupby(["statId", "chgerId"])["t"].last()
     upd = _ts(cur["statUpdDt"])
-    rs = pd.to_datetime(pd.Series([run_start.get(k) for k in key]))
+    rs = pd.Series(run_start.reindex(mi).values)
     cur["state_h"] = np.fmax((now - upd).dt.total_seconds(), (now - rs).dt.total_seconds()) / 3600
     cur["charge_h"] = (now - _ts(cur["nowTsdt"])).dt.total_seconds() / 3600
     cur.loc[cur["charge_h"].isna() & (cur["stat"] == "3"), "charge_h"] = cur["state_h"]
 
     # 플래핑 (최근 48시간)
     recent = sg[sg["t"] > now - pd.Timedelta(hours=FLAP_WINDOW_H)]
-    fl = recent.groupby(["statId", "chgerId"]).agg(
-        n=("cls", "size"), err=("cls", lambda c: (c == "E").mean()),
-        tr=("cls", lambda c: int((c.values[1:] != c.values[:-1]).sum())))
+    rprev = recent.groupby(["statId", "chgerId"])["cls"].shift()
+    fl = recent.assign(e=recent["cls"] == "E", ch=rprev.notna() & (recent["cls"] != rprev)) \
+        .groupby(["statId", "chgerId"]).agg(n=("cls", "size"), err=("e", "mean"), tr=("ch", "sum"))
+    fl["tr"] = fl["tr"].astype(int)
     ok48 = ss[(ss["start"] > now - pd.Timedelta(hours=FLAP_WINDOW_H)) & ~ss["short"]] \
         .groupby(["statId", "chgerId"]).size()
 
@@ -264,47 +266,57 @@ def diagnose():
                 .query("fast == @f")["short"].mean() for f in (True, False)}
     span = min(1.0, (now - t_first).total_seconds() / 86400)
 
+    # 충전기마다 표 전체를 다시 뒤지지 않도록, 기준 집단과 세션 집계를 미리 배열로 만들어 둔다 (결과는 이전과 같음)
+    p_fast, p_st, p_ch = pool["fast"].values, pool["statId"].values, pool["chgerId"].values
+    p_k, p_w, p_rate = pool["k"].values, pool["w_open"].values, pool["rate"].values
+    p_mi = pd.MultiIndex.from_arrays([p_st, p_ch], names=["statId", "chgerId"])
+    rec_pool = win[win["start"] > now - pd.Timedelta(hours=24)].groupby(["statId", "chgerId"]).size() \
+        .reindex(p_mi, fill_value=0).values
+    known = ss[ss["dur_min"].notna()]
+    n_known = known.groupby(["statId", "chgerId"]).size()
+    n_short = known.groupby(["statId", "chgerId"])["short"].sum()
+
     res = []
-    for i, r in cur.iterrows():
+    for i, r in zip(cur.index, cur.to_dict("records")):
         out = dict(p_sib=np.nan, p_nb=np.nan, lam=np.nan, p_b3=np.nan, alt=0, hold="", basis="", n_ref=0)
         if pd.isna(r["lat"]):
             res.append(out)
             continue
         d_all = _km(r["lat"], r["lng"], plat, plng)
-        same_t = (pool["fast"] == r["fast"]).values
-        me = ((pool["statId"] == r["statId"]) & (pool["chgerId"] == r["chgerId"])).values
-        same_st = (pool["statId"] == r["statId"]).values
+        same_t = p_fast == r["fast"]
+        me = (p_st == r["statId"]) & (p_ch == r["chgerId"])
+        same_st = p_st == r["statId"]
         out["alt"] = int(((d_all <= 1.0) & same_t & ~me).sum())
-        sib = pool[same_t & same_st & ~me]
+        sib_i = np.where(same_t & same_st & ~me)[0]
         idx = np.where(same_t & ~same_st & (d_all <= 10))[0]
-        nb = pool.iloc[idx[np.argsort(d_all[idx])][:NB_NEIGHBORS]]
-        grp, cv2 = (sib, CV2_SIB) if len(sib) else (nb, None)
-        if len(grp) and (len(sib) or len(nb) >= 5):
-            mu = grp["k"].sum() / grp["w_open"].sum()
+        nb_i = idx[np.argsort(d_all[idx])][:NB_NEIGHBORS]
+        g_i, cv2 = (sib_i, CV2_SIB) if len(sib_i) else (nb_i, None)
+        if len(g_i) and (len(sib_i) or len(nb_i) >= 5):
+            g_k, g_w = p_k[g_i], p_w[g_i]
+            mu = g_k.sum() / g_w.sum()
             if cv2 is None:   # 이웃: 충전기마다 원래 이용량이 다른 정도(이질성)를 데이터로 추정
-                rt = grp["rate"].values
-                cv2 = (rt.var(ddof=1) - mu / grp["w_open"].mean()) / mu ** 2 if mu > 0 and len(rt) > 1 else CV2_MIN
+                rt = p_rate[g_i]
+                cv2 = (rt.var(ddof=1) - mu / g_w.mean()) / mu ** 2 if mu > 0 and len(rt) > 1 else CV2_MIN
                 cv2 = float(np.clip(cv2, CV2_MIN, 4.0))
-            out.update(lam=mu, basis="형제" if len(sib) else "이웃", n_ref=len(grp), cv2=cv2)
+            out.update(lam=mu, basis="형제" if len(sib_i) else "이웃", n_ref=len(g_i), cv2=cv2)
         if test[i] and pd.notna(out["lam"]) and out["lam"] > 0:
             T_open = open_days(r["last_ok"], now, r["hours"])
             T_cal = (now - r["last_ok"]).total_seconds() / 86400
             out["T_open"], out["T_cal"] = T_open, T_cal
             if T_cal >= 1:
                 mu = out["lam"]
-                shape = 1 / (1 / (grp["k"].sum() + 1) + out["cv2"])   # 추정 불확실성 + 이질성
+                shape = 1 / (1 / (g_k.sum() + 1) + out["cv2"])   # 추정 불확실성 + 이질성
                 p = (shape / mu / (shape / mu + T_open)) ** shape      # 음이항: 0건일 확률
                 out["p_sib" if out["basis"] == "형제" else "p_nb"] = p
                 # 동시 활동 확인: 최근 24시간 기준 집단 이용이 평소의 절반 미만이면 보류 (태풍·연휴 등)
-                rec = win[win["start"] > now - pd.Timedelta(hours=24)].merge(
-                    grp[["statId", "chgerId"]], on=["statId", "chgerId"]).shape[0]
-                if rec < 0.5 * mu * len(grp) * span:
+                rec = int(rec_pool[g_i].sum())
+                if rec < 0.5 * mu * len(g_i) * span:
                     out["hold"] = "기준 집단 이용 급감(보류)"
-            mine = ss[(ss["statId"] == r["statId"]) & (ss["chgerId"] == r["chgerId"]) & ss["dur_min"].notna()]
-            ns = int(mine["short"].sum())
-            if len(mine) >= 3 and ns >= 3:
-                out["p_b3"] = _binom_tail(ns, len(mine), short_p0[bool(r["fast"])])
-                out["b3_txt"] = f"관측된 {len(mine)}번 충전 중 {ns}번이 5분 미만"
+            k = (r["statId"], r["chgerId"])
+            n_all, ns = int(n_known.get(k, 0)), int(n_short.get(k, 0))
+            if n_all >= 3 and ns >= 3:
+                out["p_b3"] = _binom_tail(ns, n_all, short_p0[bool(r["fast"])])
+                out["b3_txt"] = f"관측된 {n_all}번 충전 중 {ns}번이 5분 미만"
         res.append(out)
     R = pd.DataFrame(res)
     cur = pd.concat([cur, R], axis=1)
