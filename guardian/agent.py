@@ -7,6 +7,7 @@
   3. 점검 현황 보고서를 만든다. 표와 숫자는 코드가 계산하고, LLM은 첫머리 요약 문단만 쓴다.
   4. 운영사 점검 요청서 초안을 쓴다. 실제 발송은 담당자가 확인 버튼을 눌러야 한다.
 
+이동 시간(travel_time)은 충전소 좌표와 지역 대표 지점으로 직선거리를 계산해 추정한다(외부 통신 없음).
 LLM: OpenAI Chat Completions(도구 호출). 키는 환경변수 OPENAI_API_KEY, 모델은 OPENAI_MODEL(기본 gpt-4.1-mini).
 키가 없으면 정해진 질문 버튼만 동작한다(도구 실행 + 정해진 문장).
 """
@@ -177,9 +178,54 @@ def t_operator_message(d, attrs, operator):
             "주의": "발송은 담당자가 확인한 뒤에만 합니다."}
 
 
+# ---------------- 이동 시간 (외부 통신 없이 직선거리로 추정) ----------------
+AREA = {"제주": (33.4996, 126.5312), "제주시": (33.4996, 126.5312), "서귀포": (33.2541, 126.5600),
+        "서귀포시": (33.2541, 126.5600), "애월": (33.4636, 126.3310), "한림": (33.4113, 126.2694),
+        "한경": (33.3417, 126.1767), "대정": (33.2259, 126.2515), "안덕": (33.2499, 126.3390),
+        "중문": (33.2531, 126.4122), "남원": (33.2797, 126.7189), "표선": (33.3256, 126.8320),
+        "성산": (33.4378, 126.9166), "구좌": (33.5269, 126.8519), "조천": (33.5383, 126.6352),
+        "우도": (33.5065, 126.9530), "추자": (33.9622, 126.2994), "한라산": (33.3617, 126.5292),
+        "제주공항": (33.5070, 126.4930)}
+
+
+def _place(d, name):
+    """장소 → (위도, 경도, 찾은 이름). 지역 대표 지점 → 충전소 이름 → 충전소 주소 순으로 찾는다"""
+    q = str(name).strip()
+    if q in AREA:
+        return (*AREA[q], q)
+    c = d.dropna(subset=["lat", "lng"])
+    for col in ("statNm", "addr"):
+        hit = c[c[col].fillna("").str.contains(q, regex=False)]
+        if len(hit):
+            r = hit.iloc[0]
+            return float(r["lat"]), float(r["lng"]), (f"{r['statNm']} ({r['addr']})" if col == "statNm" else f"{q} 부근 ({r['addr']})")
+    return None
+
+
+def _km(a, b):
+    la1, lo1, la2, lo2 = map(np.radians, (a[0], a[1], b[0], b[1]))
+    h = np.sin((la2 - la1) / 2) ** 2 + np.cos(la1) * np.cos(la2) * np.sin((lo2 - lo1) / 2) ** 2
+    return float(6371 * 2 * np.arcsin(np.sqrt(h)))
+
+
+def t_travel(d, attrs, origin, destination):
+    a, b = _place(d, origin), _place(d, destination)
+    if not a or not b:
+        return {"결과": "장소를 찾지 못했습니다. 충전소 이름이나 읍면 이름으로 다시 물어봐 주세요",
+                "찾지_못한_장소": [n for n, p in ((origin, a), (destination, b)) if not p]}
+    line = _km(a, b)
+    if line < 0.2:
+        return {"출발": a[2], "도착": b[2], "결과": "같은 장소이거나 바로 옆(200m 안)입니다", "직선거리_km": round(line, 2)}
+    road = line * 1.3                                  # 도로는 직선보다 보통 30% 정도 돌아감
+    car = road / (25 if road < 10 else 40) * 60        # 시내(10km 안) 25km/h, 그 밖 40km/h로 가정
+    return {"출발": a[2], "도착": b[2], "직선거리_km": round(line, 1), "예상_도로거리_km": round(road, 1),
+            "차로_약_분": int(round(max(car, 1))), "걸어서_약_분": int(round(road / 4.5 * 60)) if road <= 3 else None,
+            "주의": "직선거리로 계산한 추정치입니다. 실제 경로·교통 상황은 지도 앱에서 확인하세요."}
+
+
 TOOL_FUNCS = {"overview": t_overview, "priority_list": t_priority, "search_station": t_search,
               "charger_detail": t_detail, "long_neglect": t_neglect, "hub_change": t_hub_change,
-              "operator_message": t_operator_message}
+              "operator_message": t_operator_message, "travel_time": t_travel}
 
 _OP = {"type": "string", "description": "운영기관 이름 또는 코드 (제주특별자치도/JD, 환경부/ME, 제주에너지공사/JC, 제주전기자동차서비스/JE). 없으면 전체"}
 TOOLS = [
@@ -203,6 +249,11 @@ TOOLS = [
                                       "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "operator_message", "description": "운영사에 보낼 점검 요청서 초안 작성(발송은 하지 않음)",
                                       "parameters": {"type": "object", "properties": {"operator": _OP}, "required": ["operator"]}}},
+    {"type": "function", "function": {"name": "travel_time", "description": "충전소·읍면·제주공항 사이 거리와 차로(가까우면 걸어서) 걸리는 시간 추정. '○○에서 충전소까지 얼마나 걸려' 같은 질문",
+                                      "parameters": {"type": "object", "properties": {
+                                          "origin": {"type": "string", "description": "출발지: 충전소 이름, 읍면 이름(애월·중문 등), 제주공항"},
+                                          "destination": {"type": "string", "description": "도착지. 충전소면 충전소 이름 그대로"}},
+                                                     "required": ["origin", "destination"]}}},
 ]
 
 
@@ -274,6 +325,7 @@ def system_prompt(attrs):
         "규칙:\n"
         "1. 숫자·충전소 이름·날짜는 반드시 도구를 호출해서 얻은 결과에서만 쓴다. 기억이나 추측으로 숫자를 만들지 않는다.\n"
         "2. 도구 결과에 없는 내용이면 '데이터에서 확인할 수 없습니다'라고 답한다.\n"
+        "   이동 시간은 travel_time 도구로 계산하고, 추정치라고 꼭 말한다.\n"
         f"3. 등급 뜻: {GRADE_HELP}. 숨은 고장은 이용 기록으로 추정한 것이지 고장 확정이 아니다.\n"
         "4. 한국어로, 짧고 쉽게. 목록은 마크다운 표나 번호 목록. 첫 문장에 답(숫자)을 먼저.\n"
         "5. 운영사 점검 요청서는 초안만 만든다. 발송은 담당자가 운영사 화면에서 확인 후 직접 한다고 안내한다.\n"
