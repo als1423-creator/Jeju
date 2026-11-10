@@ -376,9 +376,23 @@ def page_head(title, ic, desc, note):
                 unsafe_allow_html=True)
 
 
+def spread_same_spot(df):
+    """같은 충전소 충전기는 좌표가 똑같아 점이 한 자리에 포개진다. 화면에서만 작은 원 위에 나눠 그린다"""
+    n = df.groupby(["lat", "lng"])["lat"].transform("size")
+    i = df.groupby(["lat", "lng"]).cumcount()
+    many = n > 1
+    ang = 2 * np.pi * i / n
+    rad = (8 + 10 * np.sqrt(n)) / 111_000          # 미터 → 위도(도). 6대면 약 32m
+    df = df.copy()
+    df.loc[many, "lat"] = df["lat"] + (rad * np.sin(ang))[many]
+    df.loc[many, "lng"] = df["lng"] + (rad * np.cos(ang) / np.cos(np.radians(33.4)))[many]
+    return df
+
+
 def map_deck(df, key, height=430, focus=None, legend=GOV_LEGEND, big=ALERT, info=GOV_INFO):
     """focus=(위도, 경도, 이름) 이면 그곳을 확대하고 테두리로 강조"""
     df = df.dropna(subset=["lat", "lng"])[["lat", "lng", "표시", "statNm", "chgerId", "판정", "grade", "근거"]].copy()
+    df = spread_same_spot(df)
     df["color"] = df["표시"].map(RGB)
     df["r"] = np.where(df["표시"].isin(big), 110, 45)
     df = df.sort_values("표시", key=lambda s: s.map({"정상": 0, "확인불가": 0, "충전중": 1, "사용가능": 2,
@@ -402,6 +416,7 @@ def map_deck(df, key, height=430, focus=None, legend=GOV_LEGEND, big=ALERT, info
         with st.popover("", icon=":material/info:", help="지도 보는 법"):
             st.markdown(
                 "<div class='mi'><b>점 하나 = 충전기 1대</b>. 확인이 필요한 곳은 크게 표시합니다.<br>"
+                "같은 충전소 충전기는 겹치지 않게 작은 원 모양으로 나눠 그립니다.<br>"
                 f"{info}<br>점에 마우스를 올리면 충전소 이름과 판정 근거가 보입니다.<br>"
                 f"기준 {attrs['now']:%m월 %d일 %H:%M} · 30분마다 새 데이터로 갱신<br>"
                 "배경 지도 © CARTO, © OpenStreetMap 기여자</div>", unsafe_allow_html=True)
@@ -572,7 +587,7 @@ def home():
 
 def gov_page():
     page_head("공공기관", "gov", "제주 공공 충전기의 고장·방치 현황을 보고 오늘 점검할 곳을 정합니다.", NOTE["gov"])
-    opts = [b for b in BUSI if (pub["busiId"] == b).any()]   # 관리 충전기가 없는 기관은 빼기
+    opts = pub["busiId"].value_counts().index.tolist()   # 충전기 많은 기관부터 (운영사 페이지와 같은 순서)
     sel = st.pills("운영기관", opts, selection_mode="multi", default=opts, format_func=lambda x: BUSI[x],
                    label_visibility="collapsed", key="gov_busi")
     v = pub[pub["busiId"].isin(sel)] if sel else pub
@@ -634,7 +649,7 @@ def op_page():
                 kpi("주의·관찰", int(mine["grade"].isin(["주의", "관찰"]).sum()), "주의") + "</div>",
                 unsafe_allow_html=True)
 
-    a, b = st.columns([1, 1], gap="large")
+    a, b = st.columns([2, 3], gap="large")   # 점검 목록 표가 잘리지 않도록 오른쪽을 넓게
     with a:
         st.markdown("<div class='sec'>오늘 보낼 알림</div>", unsafe_allow_html=True)
         top = alarm.head(10)
@@ -659,7 +674,9 @@ def op_page():
             st.dataframe(table_cols(lst).rename(columns={"충전기 번호": "번호"})[
                              ["충전소", "번호", "판정", "등급", "방치", "고유번호"]],
                          hide_index=True, width="stretch", height=420,
-                         column_config={"번호": st.column_config.TextColumn(width="small", help="운영사가 충전소 안에서 붙인 번호"),
+                         column_config={"충전소": st.column_config.TextColumn(width="medium"),
+                                        "번호": st.column_config.TextColumn(width="small", help="운영사가 충전소 안에서 붙인 번호"),
+                                        "판정": st.column_config.TextColumn(width="small"),
                                         "등급": st.column_config.TextColumn(width="small"),
                                         "방치": st.column_config.TextColumn(width="small", help="고장 상태가 이어진 기간"),
                                         "고유번호": st.column_config.TextColumn(help="환경부 통합 충전기 ID")})
