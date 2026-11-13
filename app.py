@@ -454,7 +454,54 @@ def work_order_text(r):
         f"근거: {r['근거']}", f"권장 조치: {ACTION.get(r['code'], '현장 확인')}",
         *([f"참고: {r['bundle']}"] if r.get("bundle") else []),
         "", "현장 확인 결과 (하나 표시):", *[f"  [ ] {x}" for x in RESULT],
-        "", "확인자:            확인일:"])
+        "", "특이사항:", "",
+        "점검 일시:      년    월    일    시    분",
+        "점검자:                    (서명)",
+        "확인 책임자:               (서명)"])
+
+
+def work_orders_txt(rows):
+    head = [f"[고장났수다] 점검 지시서 묶음 · {len(rows)}건 · {attrs['now']:%Y-%m-%d %H:%M} 진단 기준", ""]
+    body = [f"{'=' * 40}\n{i}/{len(rows)}\n{work_order_text(r)}" for i, (_, r) in enumerate(rows.iterrows(), 1)]
+    return "\n".join(head + body)
+
+
+def work_orders_html(rows):
+    """인쇄용(브라우저에서 인쇄 → PDF 저장) 지시서 묶음. 한 장에 한 건씩, 서명란 포함"""
+    e = lambda x: html.escape(str(x if x is not None else ""))
+    cards = []
+    for i, (_, r) in enumerate(rows.iterrows(), 1):
+        kv = [("운영기관", r["운영기관"]), ("주소", r["addr"]), ("충전기", f"{r['종류']} {r.get('output', '')}kW"),
+              ("판정", f"{r['판정']} ({r['grade']})"), ("방치", r["방치"]), ("근거", r["근거"]),
+              ("권장 조치", ACTION.get(r["code"], "현장 확인"))] + ([("참고", r["bundle"])] if r.get("bundle") else [])
+        cards.append(
+            f"<section><div class='no'>{i} / {len(rows)}</div><h2>{e(r['statNm'])} {e(r['chgerId'])}번</h2>"
+            f"<div class='id'>고유번호 {e(r['고유번호'])}</div><table class='kv'>"
+            + "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in kv)
+            + "</table><h3>현장 확인 결과</h3><ul>" + "".join(f"<li>☐ {e(x)}</li>" for x in RESULT)
+            + "</ul><h3>특이사항</h3><div class='memo'></div><table class='sign'><tr><th>점검 일시</th>"
+              "<td>　　　년　　월　　일　　시　　분</td></tr><tr><th>점검자</th><td>(서명)</td></tr>"
+              "<tr><th>확인 책임자</th><td>(서명)</td></tr></table></section>")
+    return ("<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>점검 지시서 묶음</title><style>"
+            "@page{size:A4;margin:16mm}body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#101828;"
+            "font-size:13px;line-height:1.5}header{border-bottom:2px solid #101828;padding-bottom:8px;margin-bottom:12px}"
+            "header b{font-size:18px}section{page-break-after:always;break-after:page}section:last-child{page-break-after:auto}"
+            ".no{color:#667085;font-size:12px}h2{margin:2px 0;font-size:20px}.id{color:#475467;margin-bottom:10px}"
+            "h3{font-size:14px;margin:14px 0 6px}table{border-collapse:collapse;width:100%}"
+            "th,td{border:1px solid #D0D5DD;padding:6px 8px;text-align:left;vertical-align:top}th{background:#F2F4F7;width:22%}"
+            "ul{list-style:none;padding:0;margin:0;columns:2}li{padding:2px 0}.memo{border:1px solid #D0D5DD;height:70px}"
+            ".sign{margin-top:12px}.sign td{height:34px}</style></head><body>"
+            f"<header><b>고장났수다 · 점검 지시서 묶음</b><br>{attrs['now']:%Y-%m-%d %H:%M} 진단 기준 · {len(rows)}건 · "
+            "숨은고장은 이용 기록으로 추정한 결과이며 고장 확정이 아닙니다.</header>" + "".join(cards) + "</body></html>")
+
+
+def region_cols(df):
+    """주소에서 시(제주시·서귀포시)와 읍·면을 뽑는다. 도로명주소는 동 이름이 없어서 동 지역은 'OO시 동 지역'으로 묶는다"""
+    a = df["addr"].fillna("")
+    city = a.str.extract(r"(제주시|서귀포시)")[0]
+    town = a.str.extract(r"(?:제주시|서귀포시)\s+(\S+?[읍면])(?:\s|$)")[0]
+    town = town.fillna(city.map({"제주시": "제주시 동 지역", "서귀포시": "서귀포시 동 지역"}))
+    return city.fillna("기타"), town.fillna("기타")
 
 
 def work_order(d, r):
@@ -491,6 +538,13 @@ def work_order(d, r):
                                f"점검지시서_{r['고유번호']}.txt", width="stretch", type="primary", on_click="ignore")
 
 
+def grade_style(df):
+    """표의 '등급' 칸 글자에 등급 색을 입힌다 (경보 빨강, 주의 주황 …)"""
+    if "등급" not in df.columns:
+        return df
+    return df.style.map(lambda v: f"color:{TONE[v]};font-weight:700" if v in TONE else "", subset=["등급"])
+
+
 def pick_table(df, cols, key, height=360):
     """표의 아무 칸이나 한 번 누르면 그 행 번호를 돌려준다 (체크박스 없음)"""
     kw = dict(hide_index=True, width="stretch", height=height, on_select="rerun", key=key,
@@ -500,9 +554,9 @@ def pick_table(df, cols, key, height=360):
                              "고유번호": st.column_config.TextColumn(help="환경부 통합 충전기 ID (충전소ID-충전기 번호)"),
                              "근거": st.column_config.TextColumn(width="large")})
     try:
-        ev = st.dataframe(df[cols], selection_mode="single-cell", **kw)
+        ev = st.dataframe(grade_style(df[cols]), selection_mode="single-cell", **kw)
     except Exception:   # 칸 선택을 지원하지 않는 옛 버전이면 행 선택(체크박스)으로
-        ev = st.dataframe(df[cols], selection_mode="single-row", **kw)
+        ev = st.dataframe(grade_style(df[cols]), selection_mode="single-row", **kw)
     sel = getattr(ev, "selection", None)
     cells = getattr(sel, "cells", None) if sel is not None else None
     rows = [c[0] for c in cells] if cells else list(getattr(sel, "rows", None) or [])
@@ -550,7 +604,7 @@ def home():
 
     rep = pub[pub["트랙"] == "수리"]
     n_alarm = int((rep["grade"] == "경보").sum())
-    c = d[(d["limitYn"] != "Y") & ~d["statNm"].fillna("").str.contains("버스|차고지|회차지|여객")]
+    c = d[(d["limitYn"] != "Y") & ~d["statNm"].fillna("").str.contains(A.EXCLUDE)]
     roles = [
         (PAGES["gov"], "공공기관", "gov", "#EEF4FF", "#1D4ED8",
          "제주 공공 충전기를 지도 한 장으로 보고, 오늘 점검할 곳과 점검 지시서를 바로 뽑습니다.",
@@ -591,6 +645,18 @@ def gov_page():
     sel = st.pills("운영기관", opts, selection_mode="multi", default=opts, format_func=lambda x: BUSI[x],
                    label_visibility="collapsed", key="gov_busi")
     v = pub[pub["busiId"].isin(sel)] if sel else pub
+    v = v.assign(**dict(zip(["시", "읍면동"], region_cols(v))))
+    r1, r2 = st.columns([1, 2], vertical_alignment="center")
+    with r1:   # 오늘 갈 지역만 골라 보기 (지도·숫자·목록 모두 바뀜)
+        city = st.pills("지역", ["전체", "제주시", "서귀포시"], default="전체", key="gov_city", label_visibility="collapsed")
+    if city and city != "전체":
+        v = v[v["시"] == city]
+    with r2:
+        towns = sorted(t for t in v["읍면동"].unique() if t != "기타")
+        pick = st.multiselect("읍·면", towns, key="gov_town", placeholder="읍·면 고르기 (비우면 전체)",
+                              label_visibility="collapsed")
+    if pick:
+        v = v[v["읍면동"].isin(pick)]
     m, k = st.columns([1.55, 1], gap="large")
     with m:
         map_deck(v, "gov")
@@ -617,8 +683,24 @@ def gov_page():
         work_order(d, show.loc[i])
         out = t[["순위", "운영기관", "충전소", "충전기 번호", "고유번호", "종류", "판정", "등급", "방치", "근거",
                  "addr", "점수"]].rename(columns={"addr": "주소"})
-        st.download_button("점검 목록 내려받기 (CSV)", out.to_csv(index=False).encode("utf-8-sig"), "점검목록.csv",
-                           on_click="ignore")
+        st.markdown("<div class='sec'>오늘 점검 지시서 한꺼번에 받기</div>", unsafe_allow_html=True)
+        ids = show["고유번호"].tolist()
+        nm = {r.고유번호: f"{r.순위}. {r.statNm} {r.chgerId}번 · {r.판정}" for r in show.itertuples()}
+        # 지역·기관 필터가 바뀌면 목록도 바뀌므로, 고르기 칸도 새로 (상위 10곳으로) 시작
+        sig = abs(hash(tuple(ids))) % 10**8
+        chosen = st.multiselect("지시서에 담을 충전기", ids, default=ids[:10], format_func=nm.get, key=f"gov_batch_{sig}",
+                                help="처음에는 위 목록 상위 10곳이 담겨 있습니다. 더하거나 뺄 수 있습니다.")
+        rows = show[show["고유번호"].isin(chosen)]
+        b1, b2, b3 = st.columns(3)
+        stamp = f"{attrs['now']:%Y%m%d_%H%M}"
+        b1.download_button(f"지시서 {len(rows)}건 · 인쇄용 (PDF로 저장)", work_orders_html(rows).encode("utf-8"),
+                           f"점검지시서_{stamp}_{len(rows)}건.html", width="stretch", type="primary",
+                           disabled=not len(rows), on_click="ignore",
+                           help="내려받은 파일을 열고 인쇄(Ctrl+P) → 'PDF로 저장'을 고르면 PDF가 됩니다.")
+        b2.download_button(f"지시서 {len(rows)}건 · 텍스트", work_orders_txt(rows).encode("utf-8"),
+                           f"점검지시서_{stamp}_{len(rows)}건.txt", width="stretch", disabled=not len(rows), on_click="ignore")
+        b3.download_button("점검 목록 (CSV)", out.to_csv(index=False).encode("utf-8-sig"), "점검목록.csv",
+                           width="stretch", on_click="ignore")
     else:
         st.info("해당하는 충전기가 없습니다.")
 
@@ -671,8 +753,8 @@ def op_page():
         lst = mine if all_g else alarm
         if len(lst):
             # 방치 기간까지 한눈에: 좁은 칸은 작게, 고유번호는 맨 뒤로
-            st.dataframe(table_cols(lst).rename(columns={"충전기 번호": "번호"})[
-                             ["충전소", "번호", "판정", "등급", "방치", "고유번호"]],
+            st.dataframe(grade_style(table_cols(lst).rename(columns={"충전기 번호": "번호"})[
+                             ["충전소", "번호", "판정", "등급", "방치", "고유번호"]]),
                          hide_index=True, width="stretch", height=420,
                          column_config={"충전소": st.column_config.TextColumn(width="medium"),
                                         "번호": st.column_config.TextColumn(width="small", help="운영사가 충전소 안에서 붙인 번호"),
@@ -713,8 +795,9 @@ def cit_reason(r):
 
 def cit_page():
     page_head("도민", "cit", "가기 전에 충전소의 지금 상태를 확인하세요.", NOTE["cit"])
-    # 시민이 쓸 수 없는 곳(이용 제한, 버스 차고지)은 도민 화면에서 제외
-    c = d[(d["limitYn"] != "Y") & ~d["statNm"].fillna("").str.contains("버스|차고지|회차지|여객")].copy()
+    # 시민이 쓸 수 없는 곳(이용 제한, 버스 차고지, 이름에 '운수사 전용'·'입주민 전용'·'직원' 등)은 도민 화면에서 제외.
+    # 공공 데이터의 이용제한 표시가 '없음'이어도 이름에 전용이라고 적힌 곳이 있어 이름도 함께 본다
+    c = d[(d["limitYn"] != "Y") & ~d["statNm"].fillna("").str.contains(A.EXCLUDE)].copy()
     c["상태"] = c.apply(cit_status, axis=1)
     c["표시"] = c["상태"].map({"이용 불가": "경보", "방문 전 확인": "관찰", "사용 가능": "사용가능", "충전 중": "충전중"})
     c["근거"] = c.apply(cit_reason, axis=1)
@@ -811,6 +894,27 @@ def telegram_send(text):
         return False, f"보내지 못했습니다: {e}"
 
 
+def trace_stations(trace, limit=4):
+    """에이전트가 찾은 결과 속 충전소(도민 지도에 있는 곳만)를 순서대로 최대 4곳"""
+    out = []
+
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k == "충전소ID" and isinstance(v, str):
+                    out.append(v)
+                elif k == "고유번호" and isinstance(v, str) and "-" in v:
+                    out.append(v.rsplit("-", 1)[0])
+                else:
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    for t in trace:
+        walk(t.get("결과"))
+    return [s for s in dict.fromkeys(out) if s in CIT_IDS][:limit]
+
+
 def show_turn(m, idx=0):
     with st.chat_message(m["role"], avatar=":material/smart_toy:" if m["role"] == "assistant" else ":material/person:"):
         st.markdown(m["content"])
@@ -821,6 +925,14 @@ def show_turn(m, idx=0):
                 st.warning(f"데이터에서 확인되지 않은 숫자: {', '.join(m['bad'])}. 아래 계산 결과를 확인하세요.")
             else:
                 st.caption("✓ 답 속 숫자를 모두 데이터 계산 결과와 대조했습니다.")
+        ids = trace_stations(m.get("trace", []))
+        if ids:
+            with st.container(horizontal=True, key=f"tomap_{idx}"):
+                for sid in ids:
+                    if st.button(STAT_NAME.get(sid, sid), icon=":material/location_on:", key=f"tomap_{idx}_{sid}",
+                                 help="도민 화면 지도에서 이 충전소 위치를 봅니다"):
+                        st.session_state["cit_focus"] = sid
+                        st.switch_page(PAGES["citizen"])
         if m.get("trace"):
             with st.expander(f"에이전트가 한 일 · 도구 {len(m['trace'])}번 사용"):
                 for t in m["trace"]:
@@ -1013,6 +1125,8 @@ nav = st.navigation(list(PAGES.values()), position="top")
 st.html(CSS.replace("__FABICON__", FAB_ICON))
 d, attrs, coord_err = load(data_sig())
 pub = d[d["busiId"].isin(PUBLIC)]
+STAT_NAME = d.drop_duplicates("statId").set_index("statId")["statNm"].to_dict()
+CIT_IDS = set(d.loc[(d["limitYn"] != "Y") & ~d["statNm"].fillna("").str.contains(A.EXCLUDE), "statId"])
 
 nav.run()
 
