@@ -932,7 +932,7 @@ def show_turn(m, idx=0):
                     if st.button(STAT_NAME.get(sid, sid), icon=":material/location_on:", key=f"tomap_{idx}_{sid}",
                                  help="도민 화면 지도에서 이 충전소 위치를 봅니다"):
                         st.session_state["cit_focus"] = sid
-                        st.switch_page(PAGES["citizen"])
+                        st.switch_page(PAGES["cit"])
         if m.get("trace"):
             with st.expander(f"에이전트가 한 일 · 도구 {len(m['trace'])}번 사용"):
                 for t in m["trace"]:
