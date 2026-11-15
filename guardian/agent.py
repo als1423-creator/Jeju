@@ -185,20 +185,33 @@ AREA = {"제주": (33.4996, 126.5312), "제주시": (33.4996, 126.5312), "서귀
         "중문": (33.2531, 126.4122), "남원": (33.2797, 126.7189), "표선": (33.3256, 126.8320),
         "성산": (33.4378, 126.9166), "구좌": (33.5269, 126.8519), "조천": (33.5383, 126.6352),
         "우도": (33.5065, 126.9530), "추자": (33.9622, 126.2994), "한라산": (33.3617, 126.5292),
-        "제주공항": (33.5070, 126.4930)}
+        "제주공항": (33.5070, 126.4930), "공항": (33.5070, 126.4930), "제주국제공항": (33.5070, 126.4930)}
 
 
 def _place(d, name):
     """장소 → (위도, 경도, 찾은 이름). 지역 대표 지점 → 충전소 이름 → 충전소 주소 순으로 찾는다"""
     q = str(name).strip()
-    if q in AREA:
-        return (*AREA[q], q)
+    # "제주시청 충전소", "애월읍에서" 처럼 붙는 말을 떼고 찾는다
+    core = re.sub(r"(에서|으로|까지|에|로)$", "", q)
+    core = re.sub(r"\s*(전기차)?\s*(충전소|충전기|주차장)$", "", core).strip()
+    area = re.sub(r"(읍|면|동)$", "", core)
+    for k in (core, area):
+        if k in AREA:
+            return (*AREA[k], k)
     c = d.dropna(subset=["lat", "lng"])
-    for col in ("statNm", "addr"):
-        hit = c[c[col].fillna("").str.contains(q, regex=False)]
-        if len(hit):
-            r = hit.iloc[0]
-            return float(r["lat"]), float(r["lng"]), (f"{r['statNm']} ({r['addr']})" if col == "statNm" else f"{q} 부근 ({r['addr']})")
+    nm, ad = c["statNm"].fillna(""), c["addr"].fillna("")
+    same = c[nm.str.replace(" ", "") == core.replace(" ", "")]   # 이름이 똑같은 충전소가 있으면 그곳 먼저
+    if len(same):
+        r = same.iloc[0]
+        return float(r["lat"]), float(r["lng"]), f"{r['statNm']} ({r['addr']})"
+    for key in dict.fromkeys([q, core, core.replace(" ", "")]):
+        if len(key) < 2:
+            continue
+        for col, s in (("statNm", nm), ("addr", ad)):
+            hit = c[s.str.contains(key, regex=False)]
+            if len(hit):
+                r = hit.iloc[0]
+                return float(r["lat"]), float(r["lng"]), (f"{r['statNm']} ({r['addr']})" if col == "statNm" else f"{key} 부근 ({r['addr']})")
     return None
 
 
