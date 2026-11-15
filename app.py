@@ -1124,6 +1124,13 @@ PAGES = {
 nav = st.navigation(list(PAGES.values()), position="top")
 st.html(CSS.replace("__FABICON__", FAB_ICON))
 d, attrs, coord_err = load(data_sig())
+# 수집이 2시간 넘게 멈췄거나 예전에 받은 데이터로 실행 중이면, 모든 화면 위에 기준 시각을 알린다
+_age_h = (pd.Timestamp.now(tz="Asia/Seoul").tz_localize(None) - pd.Timestamp(attrs["now"])).total_seconds() / 3600
+if _age_h > 2:
+    _age = f"{_age_h:.0f}시간" if _age_h < 48 else f"{_age_h / 24:.0f}일"
+    st.warning(f"이 화면은 **{attrs['now']:%m월 %d일 %H:%M}** 수집 데이터 기준입니다 (지금보다 {_age} 전). "
+               "수집이 잠시 멈췄거나 예전에 받은 데이터로 실행 중일 수 있어요. 최신 상태는 https://jeju-error.streamlit.app 에서 확인하세요.",
+               icon=":material/schedule:")
 pub = d[d["busiId"].isin(PUBLIC)]
 STAT_NAME = d.drop_duplicates("statId").set_index("statId")["statNm"].to_dict()
 CIT_IDS = set(d.loc[(d["limitYn"] != "Y") & ~d["statNm"].fillna("").str.contains(A.EXCLUDE), "statId"])
